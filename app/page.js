@@ -1,11 +1,72 @@
 "use client";
-import { useState, useMemo } from "react";
-import { Users, Shirt, Package, Search } from "lucide-react";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Users, Shirt, Package, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-const cargarDatos = async () => {
+const CARGOS = [
+  "JEFE DE ODPE",
+  "CAODPE",
+  "LOGISTICO",
+  "ANALISTA DE RECURSOS HUMANOS",
+  "AUXILIAR DE RRHH T1",
+  "AUXILIAR DE RRHH T2",
+  "COORDINADOR DE CAPACITACION",
+  "COORDINADOR DE COMUNICACIONES",
+  "AUXILIAR TECNICO DIURNO",
+  "AUXILIAR TECNICO NOCTURNO",
+  "ASISTENTE DE FINANZAS",
+  "ASISTENTE LEGAL",
+  "COORDINADOR DE OPERACIONES",
+  "ASISTENTE OFICINA T1",
+  "ASISTENTE DE OFICINA T2",
+  "AUXILIAR ADMINISTRATIVO T1",
+  "AUXILIAR ADMINISTRATIVO T2",
+  "AUXILIAR DE OPERACIONES T1",
+  "AUXILIAR LOGISTICO T1",
+  "COORDINADOR DISTRITAL G1",
+  "CAPACITADOR",
+  "COORDINADOR DE LOCAL DE VOTACION",
+  "COORDINADOR DE MESA",
+  "RESPONSABLE DE CENTRO DE ACOPIO",
+  "AUXILIAR DE CENTRO DE ACOPIO",
+  "ORIENTADOR",
+  "AUXILIAR DE REPLIEGUE DE ACTAS",
+  "ENCARGADO DE CENTRO DE COMPUTO DESCENTRALIZADO",
+  "ASISTENTE DE CENTRO DE COMPUTO DESCENTRALIZADO",
+  "OPERADOR DE COMPUTO",
+  "AUXILIAR DE CENTRO DE COMPUTO",
+  "RESPONSABLE DE LINEA DE RECEPCION",
+  "OPERADOR DE LINEA DE RECEPCION",
+];
+
+const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
+
+export default function App() {
+  const [modulo, setModulo] = useState("inventario");
+  
+  // Inventario
+  const [inventarioChalecos, setInventarioChalecos] = useState(
+    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
+  );
+  const [inventarioPolos, setInventarioPolos] = useState(
+    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
+  );
+
+  // Personal
+  const [personal, setPersonal] = useState([]);
+  const [textoPersonal, setTextoPersonal] = useState("");
+  const [cargoSeleccionado, setCargoSeleccionado] = useState("");
+  const [busquedaCargo, setBusquedaCargo] = useState("");
+
+  // Entregas
+  const [entregas, setEntregas] = useState([]);
+  const [personaSeleccionada, setPersonaSeleccionada] = useState("");
+  const [tipoPrenda, setTipoPrenda] = useState("chaleco");
+  const [tallaSeleccionada, setTallaSeleccionada] = useState("M");
+  const [busquedaPersona, setBusquedaPersona] = useState("");
+
+  const cargarDatos = async () => {
   const [
     { data: datosPersonal, error: errorPersonal },
     { data: datosInventario, error: errorInventario },
@@ -70,68 +131,6 @@ const cargarDatos = async () => {
 useEffect(() => {
   cargarDatos();
 }, []);
-
-const CARGOS = [
-  "JEFE DE ODPE",
-  "CAODPE",
-  "LOGISTICO",
-  "ANALISTA DE RECURSOS HUMANOS",
-  "AUXILIAR DE RRHH T1",
-  "AUXILIAR DE RRHH T2",
-  "COORDINADOR DE CAPACITACION",
-  "COORDINADOR DE COMUNICACIONES",
-  "AUXILIAR TECNICO DIURNO",
-  "AUXILIAR TECNICO NOCTURNO",
-  "ASISTENTE DE FINANZAS",
-  "ASISTENTE LEGAL",
-  "COORDINADOR DE OPERACIONES",
-  "ASISTENTE OFICINA T1",
-  "ASISTENTE DE OFICINA T2",
-  "AUXILIAR ADMINISTRATIVO T1",
-  "AUXILIAR ADMINISTRATIVO T2",
-  "AUXILIAR DE OPERACIONES T1",
-  "AUXILIAR LOGISTICO T1",
-  "COORDINADOR DISTRITAL G1",
-  "CAPACITADOR",
-  "COORDINADOR DE LOCAL DE VOTACION",
-  "COORDINADOR DE MESA",
-  "RESPONSABLE DE CENTRO DE ACOPIO",
-  "AUXILIAR DE CENTRO DE ACOPIO",
-  "ORIENTADOR",
-  "AUXILIAR DE REPLIEGUE DE ACTAS",
-  "ENCARGADO DE CENTRO DE COMPUTO DESCENTRALIZADO",
-  "ASISTENTE DE CENTRO DE COMPUTO DESCENTRALIZADO",
-  "OPERADOR DE COMPUTO",
-  "AUXILIAR DE CENTRO DE COMPUTO",
-  "RESPONSABLE DE LINEA DE RECEPCION",
-  "OPERADOR DE LINEA DE RECEPCION",
-];
-
-const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
-
-export default function App() {
-  const [modulo, setModulo] = useState("inventario");
-  
-  // Inventario
-  const [inventarioChalecos, setInventarioChalecos] = useState(
-    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
-  );
-  const [inventarioPolos, setInventarioPolos] = useState(
-    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
-  );
-
-  // Personal
-  const [personal, setPersonal] = useState([]);
-  const [textoPersonal, setTextoPersonal] = useState("");
-  const [cargoSeleccionado, setCargoSeleccionado] = useState("");
-  const [busquedaCargo, setBusquedaCargo] = useState("");
-
-  // Entregas
-  const [entregas, setEntregas] = useState([]);
-  const [personaSeleccionada, setPersonaSeleccionada] = useState("");
-  const [tipoPrenda, setTipoPrenda] = useState("chaleco");
-  const [tallaSeleccionada, setTallaSeleccionada] = useState("M");
-  const [busquedaPersona, setBusquedaPersona] = useState("");
 
   // Procesar texto de personal
   const procesarPersonal = async () => {
