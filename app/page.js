@@ -2,6 +2,75 @@
 import { useState, useMemo } from "react";
 import { Users, Shirt, Package, Search } from "lucide-react";
 
+import { useState, useEffect, useMemo } from "react";
+import { supabase } from "../lib/supabase";
+
+const cargarDatos = async () => {
+  const [
+    { data: datosPersonal, error: errorPersonal },
+    { data: datosInventario, error: errorInventario },
+    { data: datosEntregas, error: errorEntregas }
+  ] = await Promise.all([
+    supabase.from("personal").select("*").order("nombre"),
+    supabase.from("inventario").select("*"),
+    supabase
+      .from("entregas")
+      .select(`
+        id,
+        producto,
+        talla,
+        entregado_en,
+        personal (
+          nombre,
+          dni
+        )
+      `)
+      .order("entregado_en", { ascending: false })
+  ]);
+
+  if (errorPersonal || errorInventario || errorEntregas) {
+    console.error(errorPersonal || errorInventario || errorEntregas);
+    alert("No se pudo conectar con la base de datos.");
+    return;
+  }
+
+  setPersonal(datosPersonal || []);
+  setInventarioChalecos(
+    TALLAS.reduce((resultado, talla) => {
+      const fila = datosInventario?.find(
+        item => item.producto === "chaleco" && item.talla === talla
+      );
+      resultado[talla] = fila?.stock ?? 0;
+      return resultado;
+    }, {})
+  );
+
+  setInventarioPolos(
+    TALLAS.reduce((resultado, talla) => {
+      const fila = datosInventario?.find(
+        item => item.producto === "polo" && item.talla === talla
+      );
+      resultado[talla] = fila?.stock ?? 0;
+      return resultado;
+    }, {})
+  );
+
+  setEntregas(
+    (datosEntregas || []).map(entrega => ({
+      id: entrega.id,
+      persona: entrega.personal?.nombre || "Sin nombre",
+      dni: entrega.personal?.dni || "-",
+      tipo: entrega.producto,
+      talla: entrega.talla,
+      fecha: new Date(entrega.entregado_en).toLocaleString("es-PE")
+    }))
+  );
+};
+
+useEffect(() => {
+  cargarDatos();
+}, []);
+
 const CARGOS = [
   "JEFE DE ODPE",
   "CAODPE",
@@ -65,34 +134,56 @@ export default function App() {
   const [busquedaPersona, setBusquedaPersona] = useState("");
 
   // Procesar texto de personal
-  const procesarPersonal = () => {
-    const lineas = textoPersonal.trim().split("\n");
-    const nuevos = [];
-    
-    lineas.forEach(linea => {
-      const partes = linea.trim().split(/\s+/);
-      if (partes.length >= 3) {
-        const dni = partes.find(p => /^\d{8}$/.test(p));
-        const celular = partes.find(p => /^\d{9}$/.test(p));
-        const nombre = partes.filter(p => !/^\d{8,9}$/.test(p)).join(" ");
-        
-        if (nombre && dni && celular) {
-          nuevos.push({
-            id: Date.now() + Math.random(),
-            nombre,
-            dni,
-            celular,
-            cargo: cargoSeleccionado,
-            chaleco: null,
-            polo: null,
-          });
-        }
-      }
-    });
-    
-    setPersonal(prev => [...prev, ...nuevos]);
-    setTextoPersonal("");
-  };
+  const procesarPersonal = async () => {
+  if (!cargoSeleccionado) {
+    alert("Primero seleccione un cargo.");
+    return;
+  }
+
+  const lineas = textoPersonal
+    .trim()
+    .split("\n")
+    .filter(linea => linea.trim());
+
+  const nuevos = [];
+
+  for (const linea of lineas) {
+    const partes = linea.trim().split(/\s+/);
+
+    const dni = partes.find(item => /^\d{8}$/.test(item));
+    const celular = partes.find(item => /^\d{9}$/.test(item));
+    const nombre = partes
+      .filter(item => !/^\d{8}$/.test(item) && !/^\d{9}$/.test(item))
+      .join(" ");
+
+    if (nombre && dni && celular) {
+      nuevos.push({
+        nombre,
+        dni,
+        celular,
+        cargo: cargoSeleccionado
+      });
+    }
+  }
+
+  if (nuevos.length === 0) {
+    alert("No se encontraron registros válidos.");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("personal")
+    .upsert(nuevos, { onConflict: "dni" });
+
+  if (error) {
+    alert("No se pudo guardar el personal: " + error.message);
+    return;
+  }
+
+  alert(`${nuevos.length} persona(s) registrada(s) correctamente.`);
+  setTextoPersonal("");
+  await cargarDatos();
+};
 
   // Filtrar cargos
   const cargosFiltrados = useMemo(() => {
@@ -112,54 +203,56 @@ export default function App() {
   }, [busquedaPersona, personal]);
 
   // Registrar entrega
-  const registrarEntrega = () => {
-    if (!personaSeleccionada || !tallaSeleccionada) return;
-    
-    const persona = personal.find(p => p.id === personaSeleccionada);
-    if (!persona) return;
+  const registrarEntrega = async () => {
+  if (!personaSeleccionada || !tallaSeleccionada) {
+    alert("Seleccione una persona y una talla.");
+    return;
+  }
 
-    const inventario = tipoPrenda === "chaleco" ? inventarioChalecos : inventarioPolos;
-    
-    if (inventario[tallaSeleccionada] <= 0) {
-      alert("No hay stock en esta talla");
-      return;
-    }
+  const producto = tipoPrenda === "chaleco" ? "chaleco" : "polo";
 
-    // Actualizar inventario
-    if (tipoPrenda === "chaleco") {
-      setInventarioChalecos(prev => ({
-        ...prev,
-        [tallaSeleccionada]: prev[tallaSeleccionada] - 1
-      }));
-      setPersonal(prev => prev.map(p => 
-        p.id === personaSeleccionada 
-          ? { ...p, chaleco: tallaSeleccionada }
-          : p
-      ));
-    } else {
-      setInventarioPolos(prev => ({
-        ...prev,
-        [tallaSeleccionada]: prev[tallaSeleccionada] - 1
-      }));
-      setPersonal(prev => prev.map(p => 
-        p.id === personaSeleccionada 
-          ? { ...p, polo: tallaSeleccionada }
-          : p
-      ));
-    }
+  const { error } = await supabase.rpc("registrar_entrega_prenda", {
+    p_personal_id: personaSeleccionada,
+    p_producto: producto,
+    p_talla: tallaSeleccionada
+  });
 
-    setEntregas(prev => [...prev, {
-      id: Date.now(),
-      persona: persona.nombre,
-      dni: persona.dni,
-      tipo: tipoPrenda,
-      talla: tallaSeleccionada,
-      fecha: new Date().toLocaleString()
-    }]);
+  if (error) {
+    alert(error.message);
+    return;
+  }
 
-    setPersonaSeleccionada("");
-    setTallaSeleccionada("M");
-  };
+  alert("Entrega registrada correctamente.");
+  setPersonaSeleccionada("");
+  setTallaSeleccionada("M");
+  await cargarDatos();
+};
+
+const actualizarStock = async (producto, talla, valor) => {
+  const stock = Math.max(0, Number(valor) || 0);
+
+  const { error } = await supabase
+    .from("inventario")
+    .update({
+      stock,
+      actualizado_en: new Date().toISOString()
+    })
+    .eq("producto", producto)
+    .eq("talla", talla);
+
+  if (error) {
+    alert("No se pudo actualizar el inventario: " + error.message);
+    return;
+  }
+
+  if (producto === "chaleco") {
+    setInventarioChalecos(prev => ({ ...prev, [talla]: stock }));
+  } else {
+    setInventarioPolos(prev => ({ ...prev, [talla]: stock }));
+  }
+};
+
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -234,10 +327,7 @@ export default function App() {
                       type="number"
                       min="0"
                       value={inventarioChalecos[talla]}
-                      onChange={(e) => setInventarioChalecos(prev => ({
-                        ...prev,
-                        [talla]: parseInt(e.target.value) || 0
-                      }))}
+                      onChange={(e) => actualizarStock("chaleco", talla, e.target.value)}
                       className="w-full border-2 border-gray-300 rounded-lg p-2 text-center focus:border-blue-500 focus:outline-none"
                     />
                   </div>
@@ -261,10 +351,7 @@ export default function App() {
                       type="number"
                       min="0"
                       value={inventarioPolos[talla]}
-                      onChange={(e) => setInventarioPolos(prev => ({
-                        ...prev,
-                        [talla]: parseInt(e.target.value) || 0
-                      }))}
+                      onChange={(e) => actualizarStock("polo", talla, e.target.value)}
                       className="w-full border-2 border-gray-300 rounded-lg p-2 text-center focus:border-green-500 focus:outline-none"
                     />
                   </div>

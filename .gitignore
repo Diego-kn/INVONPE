@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+
+# Archivos de compilación Next.js
+.next/
+out/
+
+# Variables de entorno y claves
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos del sistema
+.DS_Store
