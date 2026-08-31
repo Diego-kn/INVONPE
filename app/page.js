@@ -409,8 +409,7 @@ const actualizarStock = async (producto, talla, valor) => {
                 value={textoPersonal}
                 onChange={(e) => setTextoPersonal(e.target.value)}
                 placeholder="Ejemplo:
-RIXE TARAZONA JOSE  20017031    949631751
-URBANO ALVARADO DELY ISABEL  41903921    982601073"
+RIXE TARAZONA JOSE  20017031    949631751"
                 className="w-full h-40 border-2 border-gray-300 rounded-lg p-3 font-mono text-sm focus:border-blue-500 focus:outline-none"
               />
               
