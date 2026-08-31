@@ -326,7 +326,7 @@ export default function App() {
       {/* Header */}
       <header className="bg-blue-600 text-white p-4 shadow-lg">
         <h1 className="text-2xl font-bold text-center">
-          Sistema de Inventario - Chalecos y Polos
+          CONTROL DE INDUMENTARIA
         </h1>
       </header>
 
@@ -527,7 +527,7 @@ export default function App() {
                   onClick={agregarStock}
                   className="bg-blue-600 text-white font-medium p-2 rounded-lg hover:bg-blue-700 transition shadow"
                 >
-                  Registrar / Sumar Stock
+                  Registrar
                 </button>
               </div>
             </div>
