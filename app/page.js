@@ -377,7 +377,7 @@ const [filtroTalla, setFiltroTalla] = useState("");
       )}
 
       {/* Header */}
-      <header className="bg-blue-600 text-white p-4 shadow-lg">
+      <header className="bg-blue-950 text-white p-4 shadow-lg">
         <h1 className="text-2xl font-bold text-center">
           CONTROL DE INDUMENTARIA
         </h1>
