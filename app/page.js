@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Users, Shirt, Package, FileText, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import * as XLSX from 'xlsx';
+import Image from "next/image";
 
 const CARGOS = [
   "JEFE DE ODPE",
@@ -382,6 +383,17 @@ const [filtroTalla, setFiltroTalla] = useState("");
           CONTROL DE INDUMENTARIA
         </h1>
       </header>
+
+      <div className="flex items-center gap-3">
+      <Image 
+        src="/logo.png" 
+        alt="Logo INVONPE" 
+        width={40} 
+        height={40} 
+        className="object-contain"
+      />
+      <h1 className="text-xl font-bold text-gray-800">INVONPE</h1>
+    </div>
 
       {/* Navegación */}
       <nav className="bg-white shadow-md p-4">
