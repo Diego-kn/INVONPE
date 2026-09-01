@@ -46,6 +46,13 @@ const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
 export default function App() {
   const [modulo, setModulo] = useState("entregas");
 
+  // Estado para controlar el desplegable de registro de entrega
+const [mostrarFormulario, setMostrarFormulario] = useState(false);
+
+// Nuevos estados para filtros de reportes
+const [filtroPrenda, setFiltroPrenda] = useState("");
+const [filtroTalla, setFiltroTalla] = useState("");
+
   // Estado para sistema de Notificaciones con Diseño
   const [notificacion, setNotificacion] = useState({
     visible: false,
@@ -252,6 +259,8 @@ export default function App() {
         item.dni.includes(filtroBusqueda);
 
       const coincideCargo = !filtroCargo || item.cargo === filtroCargo;
+      const coincidePrenda = !filtroPrenda || item.tipo === filtroPrenda;
+      const coincideTalla = !filtroTalla || item.talla === filtroTalla;
 
       let coincideFecha = true;
       const fechaEntrega = item.fechaRaw ? new Date(item.fechaRaw) : null;
@@ -266,9 +275,9 @@ export default function App() {
         if (fechaEntrega > hasta) coincideFecha = false;
       }
 
-      return coincideBusqueda && coincideCargo && coincideFecha;
+      return coincideBusqueda && coincideCargo && coincidePrenda && coincideTalla && coincideFecha;
     });
-  }, [entregas, filtroBusqueda, filtroCargo, filtroFechaDesde, filtroFechaHasta]);
+  }, [entregas, filtroBusqueda, filtroCargo, filtroPrenda, filtroTalla, filtroFechaDesde, filtroFechaHasta]);
 
   // Registrar entrega
   const registrarEntrega = async () => {
@@ -377,29 +386,50 @@ export default function App() {
 
         {/* 1. Módulo Entregas */}
         {modulo === "entregas" && (
-          <div className="space-y-6">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold text-gray-800">Control de Entregas</h2>
+            <button
+              onClick={() => setMostrarFormulario(!mostrarFormulario)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center gap-2 transform active:scale-95"
+            >
+              <Shirt className="w-5 h-5" />
+              {mostrarFormulario ? "Ocultar Formulario" : "Comenzar Nueva Entrega"}
+            </button>
+          </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Registrar nueva entrega</h3>
+          {/* Formulario desplegable con animación de transición */}
+          <div
+            className={`transition-all duration-500 ease-in-out overflow-hidden transform origin-top ${
+              mostrarFormulario
+                ? "max-h-[800px] opacity-100 scale-y-100 mb-6"
+                : "max-h-0 opacity-0 scale-y-95 pointer-events-none"
+            }`}
+          >
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b">
+                Registrar nueva entrega
+              </h3>
 
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Buscar persona:</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Buscar persona:
+                  </label>
                   <input
                     type="text"
                     value={busquedaPersona}
                     onChange={(e) => setBusquedaPersona(e.target.value)}
                     placeholder="Nombre o DNI..."
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
                   />
                   <select
                     value={personaSeleccionada}
                     onChange={(e) => setPersonaSeleccionada(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 mt-2 focus:border-blue-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-xl p-2.5 mt-3 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
                   >
                     <option value="">-- Seleccione persona --</option>
-                    {personasFiltradas.map(p => (
+                    {personasFiltradas.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.nombre} ({p.dni}) - {p.cargo}
                       </option>
@@ -409,11 +439,13 @@ export default function App() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de prenda:</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Tipo de prenda:
+                    </label>
                     <select
                       value={tipoPrenda}
                       onChange={(e) => setTipoPrenda(e.target.value)}
-                      className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                      className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
                     >
                       <option value="chaleco">Chaleco</option>
                       <option value="polo">Polo</option>
@@ -421,15 +453,20 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Talla:</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Talla:
+                    </label>
                     <select
                       value={tallaSeleccionada}
                       onChange={(e) => setTallaSeleccionada(e.target.value)}
-                      className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                      className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
                     >
-                      {TALLAS.map(talla => (
+                      {TALLAS.map((talla) => (
                         <option key={talla} value={talla}>
-                          {talla} - Stock: {tipoPrenda === "chaleco" ? inventarioChalecos[talla] : inventarioPolos[talla]}
+                          {talla} - Stock:{" "}
+                          {tipoPrenda === "chaleco"
+                            ? inventarioChalecos[talla]
+                            : inventarioPolos[talla]}
                         </option>
                       ))}
                     </select>
@@ -439,43 +476,51 @@ export default function App() {
 
               <button
                 onClick={registrarEntrega}
-                className="mt-6 bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition w-full md:w-auto font-medium shadow-md"
+                className="mt-6 bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all w-full md:w-auto font-semibold shadow-lg hover:shadow-emerald-600/30"
               >
-                Registrar Entrega
+                Guardar Entrega
               </button>
             </div>
-
-            {entregas.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Últimas entregas ({entregas.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="p-2 text-left">Fecha</th>
-                        <th className="p-2 text-left">Persona</th>
-                        <th className="p-2 text-left">DNI</th>
-                        <th className="p-2 text-left">Prenda</th>
-                        <th className="p-2 text-left">Talla</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {entregas.slice(0, 10).map((e, i) => (
-                        <tr key={e.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="p-2">{e.fecha}</td>
-                          <td className="p-2">{e.persona}</td>
-                          <td className="p-2">{e.dni}</td>
-                          <td className="p-2 capitalize">{e.tipo}</td>
-                          <td className="p-2">{e.talla}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
-        )}
+
+          {/* Tabla de Entregas con Diseño Estilizado */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              Historial de entregas ({entregas.length})
+            </h3>
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
+                  <tr>
+                    <th className="py-3.5 px-4">Fecha</th>
+                    <th className="py-3.5 px-4">Persona</th>
+                    <th className="py-3.5 px-4">DNI</th>
+                    <th className="py-3.5 px-4">Prenda</th>
+                    <th className="py-3.5 px-4">Talla</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  {entregas.map((e) => (
+                    <tr key={e.id} className="hover:bg-blue-50/50 transition-colors">
+                      <td className="py-3 px-4 font-mono text-xs">{e.fecha}</td>
+                      <td className="py-3 px-4 font-medium text-gray-900">{e.persona}</td>
+                      <td className="py-3 px-4 font-mono">{e.dni}</td>
+                      <td className="py-3 px-4 capitalize">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          e.tipo === "chaleco" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {e.tipo}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-bold">{e.talla}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* 2. Módulo Inventario */}
         {modulo === "inventario" && (
@@ -645,113 +690,157 @@ RIXE TARAZONA JOSE  20017031    949631751"
 
         {/* 4. Módulo Reportes */}
         {modulo === "reportes" && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold text-gray-800">Reporte de Entregas</h2>
+        <div className="space-y-6">
+          <h2 className="text-xl font-bold text-gray-800">Reporte de Entregas</h2>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Filtros de búsqueda</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Persona / DNI:</label>
-                  <input
-                    type="text"
-                    value={filtroBusqueda}
-                    onChange={(e) => setFiltroBusqueda(e.target.value)}
-                    placeholder="Nombre o DNI..."
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cargo:</label>
-                  <select
-                    value={filtroCargo}
-                    onChange={(e) => setFiltroCargo(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none text-sm"
-                  >
-                    <option value="">-- Todos los cargos --</option>
-                    {CARGOS.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Desde:</label>
-                  <input
-                    type="date"
-                    value={filtroFechaDesde}
-                    onChange={(e) => setFiltroFechaDesde(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hasta:</label>
-                  <input
-                    type="date"
-                    value={filtroFechaHasta}
-                    onChange={(e) => setFiltroFechaHasta(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none text-sm"
-                  />
-                </div>
+          {/* Filtros Mejorados */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b">
+              Filtros de búsqueda avanzada
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                  Buscar Persona / DNI
+                </label>
+                <input
+                  type="text"
+                  value={filtroBusqueda}
+                  onChange={(e) => setFiltroBusqueda(e.target.value)}
+                  placeholder="Nombre o DNI..."
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
+                />
               </div>
 
-              {(filtroBusqueda || filtroCargo || filtroFechaDesde || filtroFechaHasta) && (
-                <button
-                  onClick={() => {
-                    setFiltroBusqueda("");
-                    setFiltroCargo("");
-                    setFiltroFechaDesde("");
-                    setFiltroFechaHasta("");
-                  }}
-                  className="mt-4 text-sm text-red-600 hover:underline font-medium"
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Cargo</label>
+                <select
+                  value={filtroCargo}
+                  onChange={(e) => setFiltroCargo(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
                 >
-                  Limpiar filtros
-                </button>
-              )}
+                  <option value="">Todos</option>
+                  {CARGOS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Prenda</label>
+                <select
+                  value={filtroPrenda}
+                  onChange={(e) => setFiltroPrenda(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
+                >
+                  <option value="">Todas</option>
+                  <option value="chaleco">Chaleco</option>
+                  <option value="polo">Polo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Talla</label>
+                <select
+                  value={filtroTalla}
+                  onChange={(e) => setFiltroTalla(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
+                >
+                  <option value="">Todas</option>
+                  {TALLAS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={filtroFechaDesde}
+                  onChange={(e) => setFiltroFechaDesde(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={filtroFechaHasta}
+                  onChange={(e) => setFiltroFechaHasta(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
+                />
+              </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Resultados ({entregasFiltradas.length})</h3>
+            {(filtroBusqueda || filtroCargo || filtroPrenda || filtroTalla || filtroFechaDesde || filtroFechaHasta) && (
+              <button
+                onClick={() => {
+                  setFiltroBusqueda("");
+                  setFiltroCargo("");
+                  setFiltroPrenda("");
+                  setFiltroTalla("");
+                  setFiltroFechaDesde("");
+                  setFiltroFechaHasta("");
+                }}
+                className="mt-4 text-xs font-semibold text-red-600 hover:text-red-700 underline transition-colors"
+              >
+                Limpiar todos los filtros
+              </button>
+            )}
+          </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
+          {/* Resultados del Reporte */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              Resultados ({entregasFiltradas.length})
+            </h3>
+
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
+                  <tr>
+                    <th className="py-3.5 px-4">Fecha</th>
+                    <th className="py-3.5 px-4">Persona</th>
+                    <th className="py-3.5 px-4">DNI</th>
+                    <th className="py-3.5 px-4">Cargo</th>
+                    <th className="py-3.5 px-4">Prenda</th>
+                    <th className="py-3.5 px-4">Talla</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  {entregasFiltradas.length === 0 ? (
                     <tr>
-                      <th className="p-2 text-left">Fecha</th>
-                      <th className="p-2 text-left">Persona</th>
-                      <th className="p-2 text-left">DNI</th>
-                      <th className="p-2 text-left">Cargo</th>
-                      <th className="p-2 text-left">Prenda</th>
-                      <th className="p-2 text-left">Talla</th>
+                      <td colSpan="6" className="text-center py-8 text-gray-400 font-medium">
+                        No se encontraron entregas que coincidan con los filtros.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {entregasFiltradas.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="text-center py-6 text-gray-500">
-                          No se encontraron entregas que coincidan con los filtros.
+                  ) : (
+                    entregasFiltradas.map((e) => (
+                      <tr key={e.id} className="hover:bg-blue-50/50 transition-colors">
+                        <td className="py-3 px-4 font-mono text-xs">{e.fecha}</td>
+                        <td className="py-3 px-4 font-medium text-gray-900">{e.persona}</td>
+                        <td className="py-3 px-4 font-mono">{e.dni}</td>
+                        <td className="py-3 px-4 text-xs text-gray-500 font-semibold">{e.cargo}</td>
+                        <td className="py-3 px-4 capitalize">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            e.tipo === "chaleco" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            {e.tipo}
+                          </span>
                         </td>
+                        <td className="py-3 px-4 font-bold">{e.talla}</td>
                       </tr>
-                    ) : (
-                      entregasFiltradas.map((e, i) => (
-                        <tr key={e.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="p-2">{e.fecha}</td>
-                          <td className="p-2">{e.persona}</td>
-                          <td className="p-2">{e.dni}</td>
-                          <td className="p-2">{e.cargo}</td>
-                          <td className="p-2 capitalize">{e.tipo}</td>
-                          <td className="p-2">{e.talla}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       </main>
     </div>
