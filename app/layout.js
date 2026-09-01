@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "INVENTARIO OPERACIONES",
-  description: "CONTROL DE INDUMENTARIA",
+  title: 'Control de Indumentaria',
+  description: 'Gestión de indumentaria e inventario',
 };
 
 export default function RootLayout({ children }) {
