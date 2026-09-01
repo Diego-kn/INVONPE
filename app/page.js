@@ -379,21 +379,19 @@ const [filtroTalla, setFiltroTalla] = useState("");
 
       {/* Header */}
       <header className="bg-blue-950 text-white p-4 shadow-lg">
+        <div className="flex items-center gap-3">
+          <Image 
+            src="/logo.png" 
+            alt="Logo INVONPE" 
+            width={40} 
+            height={40} 
+            className="object-contain"
+          />
+        </div>
         <h1 className="text-2xl font-bold text-center">
           CONTROL DE INDUMENTARIA
         </h1>
       </header>
-
-      <div className="flex items-center gap-3">
-      <Image 
-        src="/logo.png" 
-        alt="Logo INVONPE" 
-        width={40} 
-        height={40} 
-        className="object-contain"
-      />
-      <h1 className="text-xl font-bold text-gray-800">INVONPE</h1>
-    </div>
 
       {/* Navegación */}
       <nav className="bg-white shadow-md p-4">
