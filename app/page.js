@@ -383,8 +383,8 @@ const [filtroTalla, setFiltroTalla] = useState("");
           <Image 
             src="/logo.png" 
             alt="Logo INVONPE" 
-            width={40} 
-            height={40} 
+            width={100} 
+            height={100} 
             className="object-contain"
           />
         </div>
