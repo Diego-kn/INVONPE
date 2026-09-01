@@ -378,19 +378,21 @@ const [filtroTalla, setFiltroTalla] = useState("");
       )}
 
       {/* Header */}
-      <header className="bg-blue-950 text-white p-4 shadow-lg flex items-center justify-between relative">
-        <div className="flex items-center">
+      <header className="bg-blue-950 text-white p-4 shadow-lg flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0 relative">
+        <div className="flex items-center justify-center">
           <Image 
             src="/logo.png" 
             alt="Logo INVONPE" 
             width={180} 
             height={180} 
-            className="object-contain h-20 w-auto filter drop-shadow-md"
+            className="object-contain h-16 md:h-20 w-auto filter drop-shadow-md"
           />
         </div>
-        <h1 className="text-2xl font-bold absolute left-1/2 -translate-x-1/2">
+        <h1 className="text-xl md:text-2xl font-bold text-center md:absolute md:left-1/2 md:-translate-x-1/2 tracking-wide">
           CONTROL DE INDUMENTARIA
         </h1>
+        {/* Elemento fantasma opcional para balancear el flex en desktop si fuera necesario */}
+        <div className="hidden md:block w-20"></div>
       </header>
 
       {/* Navegación */}
