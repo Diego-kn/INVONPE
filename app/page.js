@@ -55,6 +55,50 @@ const [mostrarFormulario, setMostrarFormulario] = useState(false);
 const [filtroPrenda, setFiltroPrenda] = useState("");
 const [filtroTalla, setFiltroTalla] = useState("");
 
+const [bienes, setBienes] = useState([]);
+const [nuevoBien, setNuevoBien] = useState({
+  nombre_item: "",
+  tipo_unidad: "unidades",
+  cantidad: 1,
+  observacion: "",
+  imagen_url: ""
+});
+
+// Función para cargar los bienes desde Supabase
+const cargarBienes = async () => {
+  const { data, error } = await supabase
+    .from("bienes_recepcionados")
+    .select("*")
+    .order("fecha", { ascending: false });
+
+  if (!error && data) setBienes(data);
+};
+
+// Cargar al cambiar al módulo de bienes
+useEffect(() => {
+  if (modulo === "bienes") cargarBienes();
+}, [modulo]);
+
+// Función para guardar nuevo ingreso
+const guardarBien = async (e) => {
+  e.preventDefault();
+  if (!nuevoBien.nombre_item || nuevoBien.cantidad <= 0) {
+    alert("Ingresa un nombre y cantidad válida.");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("bienes_recepcionados")
+    .insert([nuevoBien]);
+
+  if (error) {
+    alert("Error al registrar el ingreso.");
+  } else {
+    setNuevoBien({ nombre_item: "", tipo_unidad: "unidades", cantidad: 1, observacion: "", imagen_url: "" });
+    cargarBienes();
+  }
+};
+
   // Estado para sistema de Notificaciones con Diseño
   const [notificacion, setNotificacion] = useState({
     visible: false,
@@ -434,6 +478,16 @@ const [filtroTalla, setFiltroTalla] = useState("");
             <FileText size={20} />
             Reportes
           </button>
+          <button
+          onClick={() => setModulo("bienes")}
+          className={`px-4 py-2 rounded-xl font-medium text-sm transition-all flex items-center gap-2 ${
+            modulo === "bienes"
+              ? "bg-blue-600 text-white shadow-md"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+            Bienes
+        </button>
         </div>
       </nav>
 
@@ -920,6 +974,137 @@ RIXE TARAZONA JOSE  20017031    949631751"
           </div>
         </div>
       )}
+
+      {modulo === "bienes" && (
+  <div className="space-y-6">
+    {/* Formulario de Ingreso */}
+    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+        📦 Registrar Ingreso de Bienes / Materiales
+      </h2>
+      <form onSubmit={guardarBien} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Descripción / Item</label>
+          <input
+            type="text"
+            placeholder="Ej. Escritorio, Silla, Cajas de Folletos..."
+            value={nuevoBien.nombre_item}
+            onChange={(e) => setNuevoBien({ ...nuevoBien, nombre_item: e.target.value })}
+            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Presentación</label>
+          <select
+            value={nuevoBien.tipo_unidad}
+            onChange={(e) => setNuevoBien({ ...nuevoBien, tipo_unidad: e.target.value })}
+            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="unidades">Unidades</option>
+            <option value="cajas">Cajas</option>
+            <option value="paquetes">Paquetes</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Cantidad</label>
+          <input
+            type="number"
+            min="1"
+            value={nuevoBien.cantidad}
+            onChange={(e) => setNuevoBien({ ...nuevoBien, cantidad: parseInt(e.target.value) || 1 })}
+            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            required
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Observaciones / Detalle</label>
+          <input
+            type="text"
+            placeholder="Ej. Llegan en buen estado, entregado por courier..."
+            value={nuevoBien.observacion}
+            onChange={(e) => setNuevoBien({ ...nuevoBien, observacion: e.target.value })}
+            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">URL de Foto (Opcional)</label>
+          <input
+            type="url"
+            placeholder="https://..."
+            value={nuevoBien.imagen_url}
+            onChange={(e) => setNuevoBien({ ...nuevoBien, imagen_url: e.target.value })}
+            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
+
+        <div className="md:col-span-3 flex justify-end">
+          <button
+            type="submit"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md hover:shadow-lg"
+          >
+            Registrar Recepción
+          </button>
+        </div>
+      </form>
+    </div>
+
+    {/* Tabla de Registros */}
+    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+      <h3 className="text-lg font-bold text-gray-800 mb-4">Historial de Recepciones ({bienes.length})</h3>
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full text-sm text-left border-collapse">
+          <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
+            <tr>
+              <th className="py-3.5 px-4">Fecha</th>
+              <th className="py-3.5 px-4">Item</th>
+              <th className="py-3.5 px-4">Cantidad</th>
+              <th className="py-3.5 px-4">Observaciones</th>
+              <th className="py-3.5 px-4">Foto</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-gray-700">
+            {bienes.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="text-center py-8 text-gray-400 font-medium">
+                  No hay recepciones registradas.
+                </td>
+              </tr>
+            ) : (
+              bienes.map((b) => (
+                <tr key={b.id} className="hover:bg-blue-50/50 transition-colors">
+                  <td className="py-3 px-4 text-xs font-mono">
+                    {new Date(b.fecha).toLocaleDateString()} {new Date(b.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td className="py-3 px-4 font-bold text-gray-900">{b.nombre_item}</td>
+                  <td className="py-3 px-4">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                      {b.cantidad} {b.tipo_unidad}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-xs text-gray-500">{b.observacion || "Sin observaciones"}</td>
+                  <td className="py-3 px-4">
+                    {b.imagen_url ? (
+                      <a href={b.imagen_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs font-medium">
+                        Ver Imagen
+                      </a>
+                    ) : (
+                      <span className="text-gray-400 text-xs">N/A</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+)}
 
       </main>
     </div>
