@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Users, Shirt, Package, FileText, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import * as XLSX from 'xlsx';
 
 const CARGOS = [
   "JEFE DE ODPE",
@@ -278,6 +279,49 @@ const [filtroTalla, setFiltroTalla] = useState("");
       return coincideBusqueda && coincideCargo && coincidePrenda && coincideTalla && coincideFecha;
     });
   }, [entregas, filtroBusqueda, filtroCargo, filtroPrenda, filtroTalla, filtroFechaDesde, filtroFechaHasta]);
+
+  const descargarExcel = () => {
+  if (entregasFiltradas.length === 0) {
+    alert("No hay datos para exportar con los filtros seleccionados.");
+    return;
+  }
+
+  // 1. Mapear y dar formato a las filas
+  const datosFormateados = entregasFiltradas.map((e, index) => ({
+    "N°": index + 1,
+    "Fecha de Entrega": e.fecha,
+    "DNI": e.dni,
+    "Nombres y Apellidos": e.persona,
+    "Cargo / Área": e.cargo,
+    "Tipo de Prenda": e.tipo.toUpperCase(),
+    "Talla": e.talla,
+  }));
+
+  // 2. Crear la hoja de trabajo a partir de los datos
+  const worksheet = XLSX.utils.json_to_sheet(datosFormateados);
+
+  // 3. Configurar anchos de columnas de manera proporcionada
+  const columnWidths = [
+    { wch: 6 },  // N°
+    { wch: 18 }, // Fecha
+    { wch: 12 }, // DNI
+    { wch: 32 }, // Persona
+    { wch: 22 }, // Cargo
+    { wch: 16 }, // Prenda
+    { wch: 10 }, // Talla
+  ];
+  worksheet["!cols"] = columnWidths;
+
+  // 4. Crear el libro de trabajo y añadir la hoja
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte de Entregas");
+
+  // 5. Generar la fecha actual para el nombre del archivo
+  const fechaHoy = new Date().toISOString().split("T")[0];
+
+  // 6. Descargar el archivo
+  XLSX.writeFile(workbook, `Reporte_Entregas_${fechaHoy}.xlsx`);
+};
 
   // Registrar entrega
   const registrarEntrega = async () => {
@@ -794,9 +838,32 @@ RIXE TARAZONA JOSE  20017031    949631751"
 
           {/* Resultados del Reporte */}
           <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              Resultados ({entregasFiltradas.length})
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-800">
+                Resultados ({entregasFiltradas.length})
+              </h3>
+
+              {/* Botón de Exportar a Excel */}
+              <button
+                onClick={descargarExcel}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-2 transform active:scale-95"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                Exportar a Excel (.xlsx)
+              </button>
+            </div>
 
             <div className="overflow-x-auto rounded-xl border border-gray-200">
               <table className="w-full text-sm text-left border-collapse">
