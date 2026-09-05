@@ -44,7 +44,11 @@ const CARGOS = [
   "OPERADOR DE LINEA DE RECEPCION",
 ];
 
+// Colocar fuera del componente principal
+const ORDEN_PRODUCTOS = { chaleco: 1, gorro: 2, polo: 3 };
+const PRODUCTOS = ["chaleco", "gorro", "polo"];
 const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
+
 
 export default function App() {
   const [modulo, setModulo] = useState("entregas");
@@ -148,9 +152,13 @@ const guardarBien = async (e) => {
   const [inventarioChalecos, setInventarioChalecos] = useState(
     TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
   );
+
   const [inventarioPolos, setInventarioPolos] = useState(
     TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
   );
+
+  // Estado para el stock del Gorro (Sin talla / Talla única)
+  const [inventarioGorros, setInventarioGorros] = useState(0);
 
   // Formulario para añadir inventario
   const [invProducto, setInvProducto] = useState("chaleco");
@@ -227,6 +235,12 @@ const guardarBien = async (e) => {
       }, {})
     );
 
+    // AGREGAR AQUÍ: Carga del stock para el gorro (donde talla es null)
+    const filaGorro = datosInventario?.find(
+      item => item.producto === "gorro"
+    );
+    setInventarioGorros(filaGorro?.stock ?? 0);
+
     setEntregas(
       (datosEntregas || []).map(entrega => ({
         id: entrega.id,
@@ -248,29 +262,70 @@ const guardarBien = async (e) => {
   // Sumar stock
   const agregarStock = async () => {
     const cantidadASumar = Math.max(1, Number(invCantidad) || 0);
-    const stockActual = invProducto === "chaleco" 
-      ? inventarioChalecos[invTalla] 
-      : inventarioPolos[invTalla];
+    const esGorro = invProducto === "gorro";
+    const tallaFinal = esGorro ? null : invTalla;
 
-    const nuevoStock = stockActual + cantidadASumar;
+    // Buscar si ya existe la fila en la BD
+    let query = supabase.from("inventario").select("*").eq("producto", invProducto);
+    if (esGorro) {
+      query = query.is("talla", null);
+    } else {
+      query = query.eq("talla", tallaFinal);
+    }
 
-    const { error } = await supabase
-      .from("inventario")
-      .update({
-        stock: nuevoStock,
-        actualizado_en: new Date().toISOString()
-      })
-      .eq("producto", invProducto)
-      .eq("talla", invTalla);
+    const { data: existente, error: errConsulta } = await query.maybeSingle();
 
-    if (error) {
-      mostrarNotificacion("No se pudo actualizar el inventario: " + error.message, "error");
+    if (errConsulta) {
+      mostrarNotificacion("Error al consultar el inventario: " + errConsulta.message, "error");
       return;
     }
 
-    mostrarNotificacion(`Se ingresaron +${cantidadASumar} unidades a ${invProducto.toUpperCase()} (${invTalla})`);
+    if (existente) {
+      // Actualizar registro existente
+      const { error } = await supabase
+        .from("inventario")
+        .update({
+          stock: existente.stock + cantidadASumar,
+          actualizado_en: new Date().toISOString()
+        })
+        .eq("id", existente.id);
+
+      if (error) {
+        mostrarNotificacion("No se pudo actualizar el inventario: " + error.message, "error");
+        return;
+      }
+    } else {
+      // Crear registro nuevo si no existe
+      const { error } = await supabase.from("inventario").insert([
+        {
+          producto: invProducto,
+          talla: tallaFinal,
+          stock: cantidadASumar,
+          actualizado_en: new Date().toISOString()
+        }
+      ]);
+
+      if (error) {
+        mostrarNotificacion("No se pudo insertar en el inventario: " + error.message, "error");
+        return;
+      }
+    }
+
+    mostrarNotificacion(
+      `Se ingresaron +${cantidadASumar} unidades a ${invProducto.toUpperCase()}${esGorro ? "" : ` (${invTalla})`}`
+    );
     setInvCantidad(1);
     await cargarDatos();
+  };
+
+  const handleProductoChange = (e) => {
+    const prodSeleccionado = e.target.value;
+    setInvProducto(prodSeleccionado);
+    if (prodSeleccionado === "gorro") {
+      setInvTalla(""); // Limpia la talla si selecciona gorro
+    } else if (!invTalla) {
+      setInvTalla("M"); // Vuelve a una talla por defecto si cambia a chaleco/polo
+    }
   };
 
   // Procesar texto de personal
