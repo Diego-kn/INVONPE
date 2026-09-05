@@ -5,6 +5,7 @@ import { Users, Shirt, Package, FileText, CheckCircle2, AlertCircle, X } from "l
 import { supabase } from "../lib/supabase";
 import * as XLSX from 'xlsx';
 import Image from "next/image";
+import Swal from 'sweetalert2';
 
 const CARGOS = [
   "JEFE DE ODPE",
@@ -54,17 +55,30 @@ const [mostrarFormulario, setMostrarFormulario] = useState(false);
 const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
   if (tallaActual === nuevaTalla) return;
 
+  const result = await Swal.fire({
+    title: '¿Confirmar cambio de talla?',
+    text: `Se actualizará el registro de ${tallaActual} a ${nuevaTalla} y se ajustará el inventario automáticamente.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#3085d6',
+    cancelButtonColor: '#d33',
+    confirmButtonText: 'Sí, cambiar',
+    cancelButtonText: 'Cancelar'
+  });
+
+  if (!result.isConfirmed) return;
+
   const { error } = await supabase.rpc("cambiar_talla_entrega", {
     p_entrega_id: entregaId,
     p_nueva_talla: nuevaTalla
   });
 
   if (error) {
-    mostrarNotificacion(error.message, "error");
+    Swal.fire('Error', error.message, 'error');
     return;
   }
 
-  mostrarNotificacion(`Talla cambiada exitosamente de ${tallaActual} a ${nuevaTalla}`);
+  Swal.fire('¡Actualizado!', `La talla se cambió a ${nuevaTalla}.`, 'success');
   await cargarDatos();
 };
 
