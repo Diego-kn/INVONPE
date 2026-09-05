@@ -91,6 +91,8 @@ export default function App() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [incluyeGorro, setIncluyeGorro] = useState(false); // Mover a nivel de componente
 
+ 
+  const [entregas, setEntregas] = useState([]);
   
   // useMemo funciona correctamente si procesarHistorial está fuera del componente
   const historialProcesado = useMemo(() => {
@@ -236,7 +238,6 @@ const guardarBien = async (e) => {
   const [busquedaCargo, setBusquedaCargo] = useState("");
 
   // Entregas
-  const [entregas, setEntregas] = useState([]);
   const [personaSeleccionada, setPersonaSeleccionada] = useState("");
   const [tipoPrenda, setTipoPrenda] = useState("chaleco");
   const [tallaSeleccionada, setTallaSeleccionada] = useState("M");
