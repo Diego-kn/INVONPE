@@ -49,70 +49,106 @@ const ORDEN_PRODUCTOS = { chaleco: 1, gorro: 2, polo: 3 };
 const PRODUCTOS = ["chaleco", "gorro", "polo"];
 const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
 
+// Función helper fuera de App
+    const procesarHistorial = (entregasRaw) => {
+      const historialConsolidado = [];
+
+      entregasRaw.forEach((registro) => {
+        const esGorro = registro.tipo?.toLowerCase() === 'gorro';
+
+        if (esGorro) {
+          const coincidencia = historialConsolidado.find(
+            (item) =>
+              item.dni === registro.dni &&
+              new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
+          );
+
+          if (coincidencia) {
+            coincidencia.tieneGorro = true;
+          } else {
+            historialConsolidado.push({
+              ...registro,
+              prenda: 'Ninguna',
+              talla: '-',
+              tieneGorro: true,
+            });
+          }
+        } else {
+          historialConsolidado.push({
+            ...registro,
+            prenda: registro.tipo,
+            tieneGorro: false,
+          });
+        }
+      });
+
+      return historialConsolidado;
+    };
+
 
 export default function App() {
   const [modulo, setModulo] = useState("entregas");
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [incluyeGorro, setIncluyeGorro] = useState(false); // Mover a nivel de componente
+
   
+  // useMemo funciona correctamente si procesarHistorial está fuera del componente
   const historialProcesado = useMemo(() => {
-  return procesarHistorial(entregas);
-}, [entregas]);
+    return procesarHistorial(entregas);
+  }, [entregas]);
 
-  // Estado para controlar el desplegable de registro de entrega
-const [mostrarFormulario, setMostrarFormulario] = useState(false);
-
-const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
-  if (tallaActual === nuevaTalla) return;
-
-
-const [incluyeGorro, setIncluyeGorro] = useState(false);
-
-const handleGuardarEntrega = async () => {
-  // 1. Registrar prenda principal
-  await supabase.rpc('registrar_entrega_prenda', {
-    p_personal_id: personaId,
-    p_producto: tipoPrenda,
-    p_talla: tallaSeleccionada
-  });
-
-  // 2. Si el checkbox de gorro está marcado, registrar la entrega del gorro
-  if (incluyeGorro) {
+  // Handler para guardar entrega con gorro opcional
+  const handleGuardarEntrega = async () => {
+    // 1. Registrar prenda principal
     await supabase.rpc('registrar_entrega_prenda', {
-      p_personal_id: personaId,
-      p_producto: 'gorro',
-      p_talla: 'U'
+      p_personal_id: personaSeleccionada,
+      p_producto: tipoPrenda,
+      p_talla: tallaSeleccionada
     });
-  }
 
-  // Recargar historial
-  obtenerHistorial();
-};
+    // 2. Si el checkbox de gorro está marcado, registrar entrega de gorro
+    if (incluyeGorro) {
+      await supabase.rpc('registrar_entrega_prenda', {
+        p_personal_id: personaSeleccionada,
+        p_producto: 'gorro',
+        p_talla: 'U'
+      });
+    }
 
-  const result = await Swal.fire({
-    title: '¿Confirmar cambio de talla?',
-    text: `Se actualizará el registro de ${tallaActual} a ${nuevaTalla} y se ajustará el inventario automáticamente.`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#3085d6',
-    cancelButtonColor: '#d33',
-    confirmButtonText: 'Sí, cambiar',
-    cancelButtonText: 'Cancelar'
-  });
+    await cargarDatos();
+  };
 
-  if (!result.isConfirmed) return;
+  // Handler para cambiar la talla de la entrega
+  const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
+    if (tallaActual === nuevaTalla) return;
 
-  const { error } = await supabase.rpc("cambiar_talla_entrega", {
-    p_entrega_id: entregaId,
-    p_nueva_talla: nuevaTalla
-  });
+    const result = await Swal.fire({
+      title: '¿Confirmar cambio de talla?',
+      text: `Se actualizará el registro de ${tallaActual} a ${nuevaTalla} y se ajustará el inventario automáticamente.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, cambiar',
+      cancelButtonText: 'Cancelar'
+    });
 
-  if (error) {
-    Swal.fire('Error', error.message, 'error');
-    return;
-  }
+    if (!result.isConfirmed) return;
 
-  Swal.fire('¡Actualizado!', `La talla se cambió a ${nuevaTalla}.`, 'success');
-  await cargarDatos();
-};
+    const { error } = await supabase.rpc("cambiar_talla_entrega", {
+      p_entrega_id: entregaId,
+      p_nueva_talla: nuevaTalla
+    });
+
+    if (error) {
+      Swal.fire('Error', error.message, 'error');
+      return;
+    }
+
+    Swal.fire('¡Actualizado!', `La talla se cambió a ${nuevaTalla}.`, 'success');
+    await cargarDatos();
+  };
+
 
 // Nuevos estados para filtros de reportes
 const [filtroPrenda, setFiltroPrenda] = useState("");
@@ -482,41 +518,6 @@ const guardarBien = async (e) => {
   XLSX.writeFile(workbook, `Reporte_Entregas_${fechaHoy}.xlsx`);
 };
 
-  // Función helper fuera de App
-    const procesarHistorial = (entregasRaw) => {
-      const historialConsolidado = [];
-
-      entregasRaw.forEach((registro) => {
-        const esGorro = registro.tipo?.toLowerCase() === 'gorro';
-
-        if (esGorro) {
-          const coincidencia = historialConsolidado.find(
-            (item) =>
-              item.dni === registro.dni &&
-              new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
-          );
-
-          if (coincidencia) {
-            coincidencia.tieneGorro = true;
-          } else {
-            historialConsolidado.push({
-              ...registro,
-              prenda: 'Ninguna',
-              talla: '-',
-              tieneGorro: true,
-            });
-          }
-        } else {
-          historialConsolidado.push({
-            ...registro,
-            prenda: registro.tipo,
-            tieneGorro: false,
-          });
-        }
-      });
-
-      return historialConsolidado;
-    };
 
   // Registrar entrega
   const registrarEntrega = async () => {
