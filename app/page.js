@@ -51,39 +51,38 @@ const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
 
 // Función helper fuera de App
     const procesarHistorial = (entregasRaw) => {
-      const historialConsolidado = [];
+    const historialConsolidado = [];
 
-      entregasRaw.forEach((registro) => {
-        const esGorro = registro.tipo?.toLowerCase() === 'gorro';
+    entregasRaw.forEach((registro) => {
+      const esGorro = registro.tipo?.toLowerCase() === 'gorro';
 
+      // Buscar si ya existe una entrega para esta persona el mismo día
+      const coincidencia = historialConsolidado.find(
+        (item) =>
+          item.dni === registro.dni &&
+          new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
+      );
+
+      if (coincidencia) {
         if (esGorro) {
-          const coincidencia = historialConsolidado.find(
-            (item) =>
-              item.dni === registro.dni &&
-              new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
-          );
-
-          if (coincidencia) {
-            coincidencia.tieneGorro = true;
-          } else {
-            historialConsolidado.push({
-              ...registro,
-              prenda: 'Ninguna',
-              talla: '-',
-              tieneGorro: true,
-            });
-          }
+          coincidencia.tieneGorro = true;
         } else {
-          historialConsolidado.push({
-            ...registro,
-            prenda: registro.tipo,
-            tieneGorro: false,
-          });
+          coincidencia.prenda = registro.tipo;
+          coincidencia.talla = registro.talla;
+          coincidencia.id = registro.id; // Asignar ID para el selector de talla
         }
-      });
+      } else {
+        historialConsolidado.push({
+          ...registro,
+          prenda: esGorro ? 'Ninguna' : registro.tipo,
+          talla: esGorro ? '-' : registro.talla,
+          tieneGorro: esGorro,
+        });
+      }
+    });
 
-      return historialConsolidado;
-    };
+    return historialConsolidado;
+  };
 
 
 export default function App() {
@@ -98,6 +97,24 @@ export default function App() {
   const historialProcesado = useMemo(() => {
     return procesarHistorial(entregas);
   }, [entregas]);
+
+  // Estado para la búsqueda en tiempo real
+const [busquedaHistorial, setBusquedaHistorial] = useState("");
+
+// Procesar el historial y aplicar el filtro en tiempo real
+const historialFiltrado = useMemo(() => {
+  const consolidado = procesarHistorial(entregas);
+
+  if (!busquedaHistorial.trim()) return consolidado;
+
+  const termino = busquedaHistorial.toLowerCase();
+  return consolidado.filter(
+    (item) =>
+      item.persona?.toLowerCase().includes(termino) ||
+      item.dni?.includes(termino) ||
+      item.cargo?.toLowerCase().includes(termino)
+  );
+}, [entregas, busquedaHistorial]);
 
   // Handler para guardar entrega con gorro opcional
   const handleGuardarEntrega = async () => {
@@ -761,15 +778,34 @@ const guardarBien = async (e) => {
             </div>
           </div>
 
-          {/* Tabla de Entregas con Selección de Talla para Cambio */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-gray-800">
-                Historial de entregas ({entregasFiltradas.length})
-              </h3>
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-                Transacciones Recientes
-              </span>
+          {/* Módulo Historial con Buscador Instantáneo */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">
+                  Historial de entregas ({historialFiltrado.length})
+                </h3>
+                <p className="text-xs text-gray-500">Muestra la indumentaria y gorro entregados en la misma jornada</p>
+              </div>
+
+              {/* Input de Búsqueda tipo AJAX */}
+              <div className="w-full md:w-80 relative">
+                <input
+                  type="text"
+                  value={busquedaHistorial}
+                  onChange={(e) => setBusquedaHistorial(e.target.value)}
+                  placeholder="Buscar por Nombre, DNI o Cargo..."
+                  className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                />
+                {busquedaHistorial && (
+                  <button
+                    onClick={() => setBusquedaHistorial("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -779,17 +815,15 @@ const guardarBien = async (e) => {
                     <th className="py-3.5 px-4">FECHA</th>
                     <th className="py-3.5 px-4">PERSONA</th>
                     <th className="py-3.5 px-4">DNI</th>
+                    <th className="py-3.5 px-4">CARGO</th>
                     <th className="py-3.5 px-4">PRENDA</th>
                     <th className="py-3.5 px-4 text-center">TALLA</th>
                     <th className="py-3.5 px-4 text-center">GORRO</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm font-medium text-gray-700">
-                  {historialProcesado.map((item) => (
-                    <tr 
-                      key={item.id} 
-                      className="hover:bg-gray-50/80 transition-colors duration-150"
-                    >
+                  {historialFiltrado.map((item) => (
+                    <tr key={item.id || item.dni + item.fechaRaw} className="hover:bg-gray-50/80 transition-colors">
                       <td className="py-3.5 px-4 whitespace-nowrap text-gray-500 text-xs">
                         {item.fecha}
                       </td>
@@ -798,6 +832,9 @@ const guardarBien = async (e) => {
                       </td>
                       <td className="py-3.5 px-4 font-mono text-gray-600 text-xs">
                         {item.dni}
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-500 text-xs">
+                        {item.cargo}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide capitalize ${
@@ -811,11 +848,11 @@ const guardarBien = async (e) => {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        {item.prenda !== 'Ninguna' && item.tipo !== 'gorro' ? (
+                        {item.prenda !== 'Ninguna' ? (
                           <select
                             value={item.talla}
                             onChange={(e) => cambiarTallaEntrega(item.id, item.talla, e.target.value)}
-                            className="bg-white border border-gray-300 text-gray-800 text-xs font-bold rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer transition-all shadow-sm hover:border-gray-400"
+                            className="bg-white border border-gray-300 text-gray-800 text-xs font-bold rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer shadow-sm"
                           >
                             {TALLAS.map((t) => (
                               <option key={t} value={t}>
@@ -841,10 +878,10 @@ const guardarBien = async (e) => {
                     </tr>
                   ))}
 
-                  {historialProcesado.length === 0 && (
+                  {historialFiltrado.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-8 text-gray-400 font-normal">
-                        No hay registros de entregas para mostrar.
+                      <td colSpan={7} className="text-center py-8 text-gray-400 font-normal">
+                        No se encontraron coincidencias para "{busquedaHistorial}".
                       </td>
                     </tr>
                   )}
