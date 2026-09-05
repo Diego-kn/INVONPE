@@ -52,6 +52,10 @@ const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
 
 export default function App() {
   const [modulo, setModulo] = useState("entregas");
+  
+  const historialProcesado = useMemo(() => {
+  return procesarHistorial(entregas);
+}, [entregas]);
 
   // Estado para controlar el desplegable de registro de entrega
 const [mostrarFormulario, setMostrarFormulario] = useState(false);
@@ -59,45 +63,6 @@ const [mostrarFormulario, setMostrarFormulario] = useState(false);
 const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
   if (tallaActual === nuevaTalla) return;
 
-// Función para procesar y agrupar el historial de entregas
-const procesarHistorial = (entregasRaw) => {
-  // Mapa para agrupar por persona y fecha cercana (o ID de sesión/entrega)
-  const historialConsolidado = [];
-
-  entregasRaw.forEach((registro) => {
-    const esGorro = registro.producto?.toLowerCase() === 'gorro';
-
-    if (esGorro) {
-      // Si es un gorro, buscamos si hay una prenda entregada a la misma persona el mismo día
-      const coincidencia = historialConsolidado.find(
-        (item) =>
-          item.personal_id === registro.personal_id &&
-          new Date(item.fecha).toDateString() === new Date(registro.fecha).toDateString()
-      );
-
-      if (coincidencia) {
-        coincidencia.tieneGorro = true;
-      } else {
-        // Si solo se le entregó gorro
-        historialConsolidado.push({
-          ...registro,
-          prenda: 'Ninguna',
-          talla: '-',
-          tieneGorro: true,
-        });
-      }
-    } else {
-      // Es una prenda normal (Chaleco, Casaca, etc.)
-      historialConsolidado.push({
-        ...registro,
-        prenda: registro.producto,
-        tieneGorro: false,
-      });
-    }
-  });
-
-  return historialConsolidado;
-};
 
 const [incluyeGorro, setIncluyeGorro] = useState(false);
 
@@ -517,6 +482,42 @@ const guardarBien = async (e) => {
   XLSX.writeFile(workbook, `Reporte_Entregas_${fechaHoy}.xlsx`);
 };
 
+  // Función helper fuera de App
+    const procesarHistorial = (entregasRaw) => {
+      const historialConsolidado = [];
+
+      entregasRaw.forEach((registro) => {
+        const esGorro = registro.tipo?.toLowerCase() === 'gorro';
+
+        if (esGorro) {
+          const coincidencia = historialConsolidado.find(
+            (item) =>
+              item.dni === registro.dni &&
+              new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
+          );
+
+          if (coincidencia) {
+            coincidencia.tieneGorro = true;
+          } else {
+            historialConsolidado.push({
+              ...registro,
+              prenda: 'Ninguna',
+              talla: '-',
+              tieneGorro: true,
+            });
+          }
+        } else {
+          historialConsolidado.push({
+            ...registro,
+            prenda: registro.tipo,
+            tieneGorro: false,
+          });
+        }
+      });
+
+      return historialConsolidado;
+    };
+
   // Registrar entrega
   const registrarEntrega = async () => {
   const esGorro = tipoPrenda === "gorro";
@@ -776,29 +777,29 @@ const guardarBien = async (e) => {
                 </tr>
               </thead>
               <tbody>
-                {historialProcesado.map((item) => (
-                  <tr key={item.id}>
-                    <td>{new Date(item.fecha).toLocaleString()}</td>
-                    <td>{item.persona_nombre}</td>
-                    <td>{item.dni}</td>
-                    <td>
-                      <span className="badge-prenda">{item.prenda}</span>
-                    </td>
-                    <td>{item.talla}</td>
-                    <td>
-                      {item.tieneGorro ? (
-                        <span className="badge badge-success" style={{ backgroundColor: '#10B981', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
-                          SÍ
-                        </span>
-                      ) : (
-                        <span className="badge badge-secondary" style={{ backgroundColor: '#6B7280', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
-                          NO
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              {historialProcesado.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.fecha}</td>
+                  <td>{item.persona}</td>
+                  <td>{item.dni}</td>
+                  <td>
+                    <span className="badge-prenda">{item.prenda}</span>
+                  </td>
+                  <td>{item.talla}</td>
+                  <td>
+                    {item.tieneGorro ? (
+                      <span className="bg-emerald-500 text-white px-2 py-1 rounded text-xs">
+                        SÍ
+                      </span>
+                    ) : (
+                      <span className="bg-gray-500 text-white px-2 py-1 rounded text-xs">
+                        NO
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
             </table>
             </div>
           </div>
