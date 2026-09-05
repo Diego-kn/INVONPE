@@ -51,6 +51,23 @@ export default function App() {
   // Estado para controlar el desplegable de registro de entrega
 const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
+const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
+  if (tallaActual === nuevaTalla) return;
+
+  const { error } = await supabase.rpc("cambiar_talla_entrega", {
+    p_entrega_id: entregaId,
+    p_nueva_talla: nuevaTalla
+  });
+
+  if (error) {
+    mostrarNotificacion(error.message, "error");
+    return;
+  }
+
+  mostrarNotificacion(`Talla cambiada exitosamente de ${tallaActual} a ${nuevaTalla}`);
+  await cargarDatos();
+};
+
 // Nuevos estados para filtros de reportes
 const [filtroPrenda, setFiltroPrenda] = useState("");
 const [filtroTalla, setFiltroTalla] = useState("");
@@ -592,7 +609,7 @@ const guardarBien = async (e) => {
             </div>
           </div>
 
-          {/* Tabla de Entregas con Diseño Estilizado */}
+          {/* Tabla de Entregas con Selección de Talla para Cambio */}
           <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
               Historial de entregas ({entregas.length})
@@ -605,7 +622,7 @@ const guardarBien = async (e) => {
                     <th className="py-3.5 px-4">Persona</th>
                     <th className="py-3.5 px-4">DNI</th>
                     <th className="py-3.5 px-4">Prenda</th>
-                    <th className="py-3.5 px-4">Talla</th>
+                    <th className="py-3.5 px-4">Talla (Modificar)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-700">
@@ -621,7 +638,19 @@ const guardarBien = async (e) => {
                           {e.tipo}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-bold">{e.talla}</td>
+                      <td className="py-3 px-4">
+                        <select
+                          value={e.talla}
+                          onChange={(evt) => cambiarTallaEntrega(e.id, e.talla, evt.target.value)}
+                          className="border border-gray-300 rounded-lg px-2 py-1 bg-white font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs shadow-sm cursor-pointer"
+                        >
+                          {TALLAS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
