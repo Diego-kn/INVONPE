@@ -765,20 +765,28 @@ const guardarBien = async (e) => {
                   >
                     <option value="chaleco">Chaleco</option>
                     <option value="polo">Polo</option>
+                    <option value="gorro">Gorro</option> {/* <-- AÑADIDO: Opción Gorro */}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Talla:</label>
-                  <select
-                    value={invTalla}
-                    onChange={(e) => setInvTalla(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
-                  >
-                    {TALLAS.map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
+                  {invProducto === "gorro" ? (
+                    /* <-- CONDICIONAL: Talla única para gorros */
+                    <div className="w-full border-2 border-gray-200 bg-gray-100 rounded-lg p-2 text-sm text-gray-500 font-medium">
+                      Talla Única
+                    </div>
+                  ) : (
+                    <select
+                      value={invTalla}
+                      onChange={(e) => setInvTalla(e.target.value)}
+                      className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                    >
+                      {TALLAS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -801,7 +809,8 @@ const guardarBien = async (e) => {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
+            {/* Tarjetas de Stock */}
+            <div className="grid md:grid-cols-3 gap-6">
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <span className="w-3 h-3 bg-blue-500 rounded-full"></span> Chalecos
@@ -829,10 +838,22 @@ const guardarBien = async (e) => {
                   ))}
                 </div>
               </div>
+
+              {/* <-- AÑADIDO: Tarjeta de Inventario para Gorros */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <span className="w-3 h-3 bg-amber-500 rounded-full"></span> Gorros
+                </h3>
+                <div className="p-6 bg-amber-50 rounded-lg text-center flex flex-col justify-center items-center h-28">
+                  <span className="block font-bold text-gray-600 text-sm">Talla Única</span>
+                  <span className="text-4xl font-black text-amber-700">{inventarioGorros}</span>
+                </div>
+              </div>
             </div>
 
+            {/* <-- ACTUALIZADO: Totalizador con Gorros */}
             <div className="bg-gray-100 rounded-lg p-4 text-center text-sm font-semibold text-gray-700">
-              Total Chalecos: {Object.values(inventarioChalecos).reduce((a, b) => a + b, 0)} | Total Polos: {Object.values(inventarioPolos).reduce((a, b) => a + b, 0)}
+              Total Chalecos: {Object.values(inventarioChalecos).reduce((a, b) => a + b, 0)} | Total Polos: {Object.values(inventarioPolos).reduce((a, b) => a + b, 0)} | Total Gorros: {inventarioGorros}
             </div>
           </div>
         )}
