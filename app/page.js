@@ -59,6 +59,69 @@ const [mostrarFormulario, setMostrarFormulario] = useState(false);
 const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
   if (tallaActual === nuevaTalla) return;
 
+// Función para procesar y agrupar el historial de entregas
+const procesarHistorial = (entregasRaw) => {
+  // Mapa para agrupar por persona y fecha cercana (o ID de sesión/entrega)
+  const historialConsolidado = [];
+
+  entregasRaw.forEach((registro) => {
+    const esGorro = registro.producto?.toLowerCase() === 'gorro';
+
+    if (esGorro) {
+      // Si es un gorro, buscamos si hay una prenda entregada a la misma persona el mismo día
+      const coincidencia = historialConsolidado.find(
+        (item) =>
+          item.personal_id === registro.personal_id &&
+          new Date(item.fecha).toDateString() === new Date(registro.fecha).toDateString()
+      );
+
+      if (coincidencia) {
+        coincidencia.tieneGorro = true;
+      } else {
+        // Si solo se le entregó gorro
+        historialConsolidado.push({
+          ...registro,
+          prenda: 'Ninguna',
+          talla: '-',
+          tieneGorro: true,
+        });
+      }
+    } else {
+      // Es una prenda normal (Chaleco, Casaca, etc.)
+      historialConsolidado.push({
+        ...registro,
+        prenda: registro.producto,
+        tieneGorro: false,
+      });
+    }
+  });
+
+  return historialConsolidado;
+};
+
+const [incluyeGorro, setIncluyeGorro] = useState(false);
+
+const handleGuardarEntrega = async () => {
+  // 1. Registrar prenda principal
+  await supabase.rpc('registrar_entrega_prenda', {
+    p_personal_id: personaId,
+    p_producto: tipoPrenda,
+    p_talla: tallaSeleccionada
+  });
+
+  // 2. Si el checkbox de gorro está marcado, registrar la entrega del gorro
+  if (incluyeGorro) {
+    await supabase.rpc('registrar_entrega_prenda', {
+      p_personal_id: personaId,
+      p_producto: 'gorro',
+      p_talla: 'U'
+    });
+  }
+
+  // Recargar historial
+  obtenerHistorial();
+};
+
   const result = await Swal.fire({
     title: '¿Confirmar cambio de talla?',
     text: `Se actualizará el registro de ${tallaActual} a ${nuevaTalla} y se ajustará el inventario automáticamente.`,
@@ -701,46 +764,42 @@ const guardarBien = async (e) => {
               Historial de entregas ({entregas.length})
             </h3>
             <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
-                  <tr>
-                    <th className="py-3.5 px-4">Fecha</th>
-                    <th className="py-3.5 px-4">Persona</th>
-                    <th className="py-3.5 px-4">DNI</th>
-                    <th className="py-3.5 px-4">Prenda</th>
-                    <th className="py-3.5 px-4">Talla (Modificar)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-gray-700">
-                  {entregas.map((e) => (
-                    <tr key={e.id} className="hover:bg-blue-50/50 transition-colors">
-                      <td className="py-3 px-4 font-mono text-xs">{e.fecha}</td>
-                      <td className="py-3 px-4 font-medium text-gray-900">{e.persona}</td>
-                      <td className="py-3 px-4 font-mono">{e.dni}</td>
-                      <td className="py-3 px-4 capitalize">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          e.tipo === "chaleco" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-                        }`}>
-                          {e.tipo}
+              <table className="tabla-entregas">
+              <thead>
+                <tr>
+                  <th>FECHA</th>
+                  <th>PERSONA</th>
+                  <th>DNI</th>
+                  <th>PRENDA</th>
+                  <th>TALLA</th>
+                  <th>GORRO</th> {/* Nueva columna */}
+                </tr>
+              </thead>
+              <tbody>
+                {historialProcesado.map((item) => (
+                  <tr key={item.id}>
+                    <td>{new Date(item.fecha).toLocaleString()}</td>
+                    <td>{item.persona_nombre}</td>
+                    <td>{item.dni}</td>
+                    <td>
+                      <span className="badge-prenda">{item.prenda}</span>
+                    </td>
+                    <td>{item.talla}</td>
+                    <td>
+                      {item.tieneGorro ? (
+                        <span className="badge badge-success" style={{ backgroundColor: '#10B981', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+                          SÍ
                         </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <select
-                          value={e.talla}
-                          onChange={(evt) => cambiarTallaEntrega(e.id, e.talla, evt.target.value)}
-                          className="border border-gray-300 rounded-lg px-2 py-1 bg-white font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs shadow-sm cursor-pointer"
-                        >
-                          {TALLAS.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ) : (
+                        <span className="badge badge-secondary" style={{ backgroundColor: '#6B7280', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+                          NO
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             </div>
           </div>
         </div>
