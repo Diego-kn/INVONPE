@@ -456,27 +456,29 @@ const guardarBien = async (e) => {
 
   // Registrar entrega
   const registrarEntrega = async () => {
-    if (!personaSeleccionada || !tallaSeleccionada) {
-      mostrarNotificacion("Seleccione una persona y una talla.", "error");
-      return;
-    }
+  const esGorro = tipoPrenda === "gorro";
 
-    const { error } = await supabase.rpc("registrar_entrega_prenda", {
-      p_personal_id: personaSeleccionada,
-      p_producto: tipoPrenda,
-      p_talla: tallaSeleccionada
-    });
+  if (!personaSeleccionada || (!esGorro && !tallaSeleccionada)) {
+    mostrarNotificacion("Seleccione una persona y una talla.", "error");
+    return;
+  }
 
-    if (error) {
-      mostrarNotificacion(error.message, "error");
-      return;
-    }
+  const { error } = await supabase.rpc("registrar_entrega_prenda", {
+    p_personal_id: personaSeleccionada,
+    p_producto: tipoPrenda,
+    p_talla: esGorro ? null : tallaSeleccionada
+  });
 
-    mostrarNotificacion("Entrega registrada exitosamente.");
-    setPersonaSeleccionada("");
-    setTallaSeleccionada("M");
-    await cargarDatos();
-  };
+  if (error) {
+    mostrarNotificacion(error.message, "error");
+    return;
+  }
+
+  mostrarNotificacion("Entrega registrada exitosamente.");
+  setPersonaSeleccionada("");
+  setTallaSeleccionada("M");
+  await cargarDatos();
+};
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
@@ -644,27 +646,42 @@ const guardarBien = async (e) => {
                     >
                       <option value="chaleco">Chaleco</option>
                       <option value="polo">Polo</option>
+                      <option value="gorro">Gorro</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                      Talla:
-                    </label>
-                    <select
-                      value={tallaSeleccionada}
-                      onChange={(e) => setTallaSeleccionada(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
-                    >
-                      {TALLAS.map((talla) => (
-                        <option key={talla} value={talla}>
-                          {talla} - Stock:{" "}
-                          {tipoPrenda === "chaleco"
-                            ? inventarioChalecos[talla]
-                            : inventarioPolos[talla]}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Reemplazar el bloque actual de Talla por el siguiente: */}
+                    {tipoPrenda !== "gorro" ? (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                          Talla:
+                        </label>
+                        <select
+                          value={tallaSeleccionada}
+                          onChange={(e) => setTallaSeleccionada(e.target.value)}
+                          className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
+                        >
+                          {TALLAS.map((talla) => (
+                            <option key={talla} value={talla}>
+                              {talla} - Stock:{" "}
+                              {tipoPrenda === "chaleco"
+                                ? inventarioChalecos[talla]
+                                : inventarioPolos[talla]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                          Talla:
+                        </label>
+                        <div className="w-full border border-gray-200 bg-gray-50 text-gray-500 rounded-xl p-2.5 text-sm font-medium">
+                          Talla única (Stock disponible: {inventarioGorros})
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
