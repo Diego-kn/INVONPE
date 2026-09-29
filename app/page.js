@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Users, Shirt, Package, FileText, CheckCircle2, AlertCircle, X } from "lucide-react";
+import { Users, Shirt, Package, FileText, CheckCircle2, AlertCircle, X, History } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import * as XLSX from 'xlsx';
 import Image from "next/image";
@@ -46,184 +46,40 @@ const CARGOS = [
   "ASISTENTE DE DIFUSION DE REGION",
 ];
 
-// Colocar fuera del componente principal
-const ORDEN_PRODUCTOS = { chaleco: 1, gorro: 2, polo: 3 };
-const PRODUCTOS = ["chaleco", "gorro", "polo"];
 const TALLAS = ["XS", "S", "M", "L", "XL", "XXL"];
-
-// Función helper fuera de App
-    const procesarHistorial = (entregasRaw) => {
-    const historialConsolidado = [];
-
-    entregasRaw.forEach((registro) => {
-      const esGorro = registro.tipo?.toLowerCase() === 'gorro';
-
-      // Buscar si ya existe una entrega para esta persona el mismo día
-      const coincidencia = historialConsolidado.find(
-        (item) =>
-          item.dni === registro.dni &&
-          new Date(item.fechaRaw).toDateString() === new Date(registro.fechaRaw).toDateString()
-      );
-
-      if (coincidencia) {
-        if (esGorro) {
-          coincidencia.tieneGorro = true;
-        } else {
-          coincidencia.prenda = registro.tipo;
-          coincidencia.talla = registro.talla;
-          coincidencia.id = registro.id; // Asignar ID para el selector de talla
-        }
-      } else {
-        historialConsolidado.push({
-          ...registro,
-          prenda: esGorro ? 'Ninguna' : registro.tipo,
-          talla: esGorro ? '-' : registro.talla,
-          tieneGorro: esGorro,
-        });
-      }
-    });
-
-    return historialConsolidado;
-  };
-
 
 export default function App() {
   const [modulo, setModulo] = useState("entregas");
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [incluyeGorro, setIncluyeGorro] = useState(false); // Mover a nivel de componente
 
- 
+  // Estados principales de datos
   const [entregas, setEntregas] = useState([]);
-  
-  // useMemo funciona correctamente si procesarHistorial está fuera del componente
-  const historialProcesado = useMemo(() => {
-    return procesarHistorial(entregas);
-  }, [entregas]);
-
-  // Estado para la búsqueda en tiempo real
-const [busquedaHistorial, setBusquedaHistorial] = useState("");
-
-// Procesar el historial y aplicar el filtro en tiempo real
-const historialFiltrado = useMemo(() => {
-  const consolidado = procesarHistorial(entregas);
-
-  if (!busquedaHistorial.trim()) return consolidado;
-
-  const termino = busquedaHistorial.toLowerCase();
-  return consolidado.filter(
-    (item) =>
-      item.persona?.toLowerCase().includes(termino) ||
-      item.dni?.includes(termino) ||
-      item.cargo?.toLowerCase().includes(termino)
+  const [personal, setPersonal] = useState([]);
+  const [inventarioChalecos, setInventarioChalecos] = useState(
+    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
   );
-}, [entregas, busquedaHistorial]);
+  const [inventarioPolos, setInventarioPolos] = useState(
+    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
+  );
+  const [inventarioGorros, setInventarioGorros] = useState(0);
 
-  // Handler para guardar entrega con gorro opcional
-  const handleGuardarEntrega = async () => {
-    // 1. Registrar prenda principal
-    await supabase.rpc('registrar_entrega_prenda', {
-      p_personal_id: personaSeleccionada,
-      p_producto: tipoPrenda,
-      p_talla: tallaSeleccionada
-    });
+  // Formulario de Nueva Entrega Múltiple
+  const [personaSeleccionada, setPersonaSeleccionada] = useState("");
+  const [busquedaPersona, setBusquedaPersona] = useState("");
+  
+  // Selección múltiple de prendas
+  const [incluirChaleco, IncluirChalecoSet] = useState(true);
+  const [tallaChaleco, setTallaChaleco] = useState("M");
 
-    // 2. Si el checkbox de gorro está marcado, registrar entrega de gorro
-    if (incluyeGorro) {
-      await supabase.rpc('registrar_entrega_prenda', {
-        p_personal_id: personaSeleccionada,
-        p_producto: 'gorro',
-        p_talla: 'U'
-      });
-    }
+  const [incluirPolo, incluirPoloSet] = useState(false);
+  const [tallaPolo, setTallaPolo] = useState("M");
 
-    await cargarDatos();
-  };
+  const [incluirGorro, incluirGorroSet] = useState(false);
 
-  // Handler para cambiar la talla de la entrega
-  const cambiarTallaEntrega = async (entregaId, tallaActual, nuevaTalla) => {
-    if (tallaActual === nuevaTalla) return;
-
-    const result = await Swal.fire({
-      title: '¿Confirmar cambio de talla?',
-      text: `Se actualizará el registro de ${tallaActual} a ${nuevaTalla} y se ajustará el inventario automáticamente.`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#3085d6',
-      cancelButtonColor: '#d33',
-      confirmButtonText: 'Sí, cambiar',
-      cancelButtonText: 'Cancelar'
-    });
-
-    if (!result.isConfirmed) return;
-
-    const { error } = await supabase.rpc("cambiar_talla_entrega", {
-      p_entrega_id: entregaId,
-      p_nueva_talla: nuevaTalla
-    });
-
-    if (error) {
-      Swal.fire('Error', error.message, 'error');
-      return;
-    }
-
-    Swal.fire('¡Actualizado!', `La talla se cambió a ${nuevaTalla}.`, 'success');
-    await cargarDatos();
-  };
-
-
-// Nuevos estados para filtros de reportes
-const [filtroPrenda, setFiltroPrenda] = useState("");
-const [filtroTalla, setFiltroTalla] = useState("");
-
-const [bienes, setBienes] = useState([]);
-const [nuevoBien, setNuevoBien] = useState({
-  nombre_item: "",
-  tipo_unidad: "unidades",
-  cantidad: 1,
-  observacion: "",
-  imagen_url: ""
-});
-
-// Función para cargar los bienes desde Supabase
-const cargarBienes = async () => {
-  const { data, error } = await supabase
-    .from("bienes_recepcionados")
-    .select("*")
-    .order("fecha", { ascending: false });
-
-  if (!error && data) setBienes(data);
-};
-
-// Cargar al cambiar al módulo de bienes
-useEffect(() => {
-  if (modulo === "bienes") cargarBienes();
-}, [modulo]);
-
-// Función para guardar nuevo ingreso
-const guardarBien = async (e) => {
-  e.preventDefault();
-  if (!nuevoBien.nombre_item || nuevoBien.cantidad <= 0) {
-    alert("Ingresa un nombre y cantidad válida.");
-    return;
-  }
-
-  const { error } = await supabase
-    .from("bienes_recepcionados")
-    .insert([nuevoBien]);
-
-  if (error) {
-    alert("Error al registrar el ingreso.");
-  } else {
-    setNuevoBien({ nombre_item: "", tipo_unidad: "unidades", cantidad: 1, observacion: "", imagen_url: "" });
-    cargarBienes();
-  }
-};
-
-  // Estado para sistema de Notificaciones con Diseño
+  // Notificaciones Toast
   const [notificacion, setNotificacion] = useState({
     visible: false,
     mensaje: "",
-    tipo: "exito" // 'exito' | 'error'
+    tipo: "exito"
   });
 
   const mostrarNotificacion = (mensaje, tipo = "exito") => {
@@ -233,41 +89,7 @@ const guardarBien = async (e) => {
     }, 4000);
   };
 
-  // Inventario
-  const [inventarioChalecos, setInventarioChalecos] = useState(
-    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
-  );
-
-  const [inventarioPolos, setInventarioPolos] = useState(
-    TALLAS.reduce((acc, talla) => ({ ...acc, [talla]: 0 }), {})
-  );
-
-  // Estado para el stock del Gorro (Sin talla / Talla única)
-  const [inventarioGorros, setInventarioGorros] = useState(0);
-
-  // Formulario para añadir inventario
-  const [invProducto, setInvProducto] = useState("chaleco");
-  const [invTalla, setInvTalla] = useState("M");
-  const [invCantidad, setInvCantidad] = useState(1);
-
-  // Personal
-  const [personal, setPersonal] = useState([]);
-  const [textoPersonal, setTextoPersonal] = useState("");
-  const [cargoSeleccionado, setCargoSeleccionado] = useState("");
-  const [busquedaCargo, setBusquedaCargo] = useState("");
-
-  // Entregas
-  const [personaSeleccionada, setPersonaSeleccionada] = useState("");
-  const [tipoPrenda, setTipoPrenda] = useState("chaleco");
-  const [tallaSeleccionada, setTallaSeleccionada] = useState("M");
-  const [busquedaPersona, setBusquedaPersona] = useState("");
-
-  // Filtros de Reporte
-  const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
-  const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
-  const [filtroCargo, setFiltroCargo] = useState("");
-  const [filtroBusqueda, setFiltroBusqueda] = useState("");
-
+  // Carga de datos desde Supabase
   const cargarDatos = async () => {
     const [
       { data: datosPersonal, error: errorPersonal },
@@ -283,7 +105,9 @@ const guardarBien = async (e) => {
           producto,
           talla,
           entregado_en,
+          personal_id,
           personal (
+            id,
             nombre,
             dni,
             cargo
@@ -299,6 +123,7 @@ const guardarBien = async (e) => {
     }
 
     setPersonal(datosPersonal || []);
+    
     setInventarioChalecos(
       TALLAS.reduce((resultado, talla) => {
         const fila = datosInventario?.find(
@@ -319,7 +144,6 @@ const guardarBien = async (e) => {
       }, {})
     );
 
-    // AGREGAR AQUÍ: Carga del stock para el gorro (donde talla es null)
     const filaGorro = datosInventario?.find(
       item => item.producto === "gorro"
     );
@@ -328,6 +152,7 @@ const guardarBien = async (e) => {
     setEntregas(
       (datosEntregas || []).map(entrega => ({
         id: entrega.id,
+        personalId: entrega.personal_id || entrega.personal?.id,
         persona: entrega.personal?.nombre || "Sin nombre",
         dni: entrega.personal?.dni || "-",
         cargo: entrega.personal?.cargo || "-",
@@ -343,13 +168,350 @@ const guardarBien = async (e) => {
     cargarDatos();
   }, []);
 
-  // Sumar stock
+  // Registrar múltiples prendas en simultáneo
+  const registrarEntregaMultiple = async () => {
+    if (!personaSeleccionada) {
+      mostrarNotificacion("Seleccione una persona.", "error");
+      return;
+    }
+
+    if (!incluirChaleco && !incluirPolo && !incluirGorro) {
+      mostrarNotificacion("Debe seleccionar al menos una prenda para registrar.", "error");
+      return;
+    }
+
+    const tareas = [];
+
+    if (incluirChaleco) {
+      tareas.push(
+        supabase.rpc("registrar_entrega_prenda", {
+          p_personal_id: personaSeleccionada,
+          p_producto: "chaleco",
+          p_talla: tallaChaleco
+        })
+      );
+    }
+
+    if (incluirPolo) {
+      tareas.push(
+        supabase.rpc("registrar_entrega_prenda", {
+          p_personal_id: personaSeleccionada,
+          p_producto: "polo",
+          p_talla: tallaPolo
+        })
+      );
+    }
+
+    if (incluirGorro) {
+      tareas.push(
+        supabase.rpc("registrar_entrega_prenda", {
+          p_personal_id: personaSeleccionada,
+          p_producto: "gorro",
+          p_talla: null
+        })
+      );
+    }
+
+    const resultados = await Promise.all(tareas);
+    const errorEncontrado = resultados.find(r => r.error);
+
+    if (errorEncontrado) {
+      mostrarNotificacion(errorEncontrado.error.message, "error");
+      return;
+    }
+
+    mostrarNotificacion("Entregas registradas exitosamente.");
+    setPersonaSeleccionada("");
+    IncluirChalecoSet(true);
+    incluirPoloSet(false);
+    incluirGorroSet(false);
+    await cargarDatos();
+  };
+
+  // Función con confirmación para Estado de Personal
+  const handleCambiarPrendaEstado = async (personalId, tipoPrenda, tallaActual, event) => {
+    const nuevaTallaValor = event.target.value;
+    if (tallaActual === nuevaTallaValor) return;
+
+    const esEliminacion = nuevaTallaValor === "NO";
+
+    const confirmacion = await Swal.fire({
+      title: esEliminacion ? '¿Quitar esta prenda?' : '¿Confirmar cambio o asignación?',
+      text: esEliminacion 
+        ? `Se retirará el ${tipoPrenda} y se devolverá al inventario.` 
+        : `Se actualizará el registro de ${tipoPrenda} a la talla ${nuevaTallaValor} ajustando el inventario.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, realizar acción',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (!confirmacion.isConfirmed) {
+      await cargarDatos();
+      return;
+    }
+
+    if (esEliminacion) {
+      const entregaActual = entregas.find(e => e.personalId === personalId && e.tipo === tipoPrenda);
+      if (entregaActual) {
+        const { error } = await supabase.from("entregas").delete().eq("id", entregaActual.id);
+        if (error) {
+          mostrarNotificacion("Error al quitar la prenda: " + error.message, "error");
+          await cargarDatos();
+          return;
+        }
+        mostrarNotificacion("Prenda retirada correctamente.");
+        await cargarDatos();
+      }
+      return;
+    }
+
+    const entregaActual = entregas.find(e => e.personalId === personalId && e.tipo === tipoPrenda);
+    
+    if (entregaActual) {
+      const { error } = await supabase.rpc("cambiar_talla_entrega", {
+        p_entrega_id: entregaActual.id,
+        p_nueva_talla: nuevaTallaValor
+      });
+
+      if (error) {
+        mostrarNotificacion("Error al actualizar la talla: " + error.message, "error");
+        await cargarDatos();
+        return;
+      }
+      mostrarNotificacion(`Talla actualizada a ${nuevaTallaValor} correctamente.`);
+      await cargarDatos();
+    } else {
+      const { error } = await supabase.rpc("registrar_entrega_prenda", {
+        p_personal_id: personalId,
+        p_producto: tipoPrenda,
+        p_talla: tipoPrenda === "gorro" ? null : nuevaTallaValor
+      });
+
+      if (error) {
+        mostrarNotificacion("Error al asignar la prenda: " + error.message, "error");
+        await cargarDatos();
+        return;
+      }
+      mostrarNotificacion("Prenda asignada correctamente.");
+      await cargarDatos();
+    }
+  };
+
+  // Consolidado por persona
+  const estadoPersonalConsolidado = useMemo(() => {
+    const mapa = {};
+
+    personal.forEach(p => {
+      mapa[p.id] = {
+        id: p.id,
+        nombre: p.nombre,
+        dni: p.dni,
+        cargo: p.cargo,
+        chaleco: null,
+        chalecoTalla: "-",
+        polo: null,
+        poloTalla: "-",
+        gorro: false,
+        ultimaFecha: null
+      };
+    });
+
+    entregas.forEach(e => {
+      if (!e.personalId || !mapa[e.personalId]) return;
+      const registro = mapa[e.personalId];
+
+      if (!registro.ultimaFecha || new Date(e.fechaRaw) > new Date(registro.ultimaFecha)) {
+        registro.ultimaFecha = e.fechaRaw;
+      }
+
+      if (e.tipo === "chaleco") {
+        registro.chaleco = e.id;
+        registro.chalecoTalla = e.talla;
+      } else if (e.tipo === "polo") {
+        registro.polo = e.id;
+        registro.poloTalla = e.talla;
+      } else if (e.tipo === "gorro") {
+        registro.gorro = true;
+      }
+    });
+
+    return Object.values(mapa);
+  }, [personal, entregas]);
+
+  // Buscador para la pestaña Estado
+  const [busquedaEstado, setBusquedaEstado] = useState("");
+  const estadoFiltrado = useMemo(() => {
+    if (!busquedaEstado.trim()) return estadoPersonalConsolidado;
+    const term = busquedaEstado.toLowerCase();
+    return estadoPersonalConsolidado.filter(item =>
+      item.nombre.toLowerCase().includes(term) ||
+      item.dni.includes(term) ||
+      item.cargo.toLowerCase().includes(term) ||
+      (item.chalecoTalla && item.chalecoTalla.toLowerCase().includes(term)) ||
+      (item.poloTalla && item.poloTalla.toLowerCase().includes(term))
+    );
+  }, [estadoPersonalConsolidado, busquedaEstado]);
+
+  // Nuevos Estados para Filtros Avanzados del Módulo Reportes de Estado
+  const [filtroRepoBusqueda, setFiltroRepoBusqueda] = useState("");
+  const [filtroRepoCargo, setFiltroRepoCargo] = useState("");
+  const [filtroRepoPrenda, setFiltroRepoPrenda] = useState("");
+  const [filtroRepoTalla, setFiltroRepoTalla] = useState("");
+  const [filtroRepoDesde, setFiltroRepoDesde] = useState("");
+  const [filtroRepoHasta, setFiltroRepoHasta] = useState("");
+
+  const reporteEstadoFiltrado = useMemo(() => {
+    return estadoPersonalConsolidado.filter(item => {
+      // 1. Búsqueda por nombre o DNI
+      const coincideBusqueda = 
+        !filtroRepoBusqueda ||
+        item.nombre.toLowerCase().includes(filtroRepoBusqueda.toLowerCase()) ||
+        item.dni.includes(filtroRepoBusqueda);
+
+      // 2. Filtro por Cargo
+      const coincideCargo = !filtroRepoCargo || item.cargo === filtroRepoCargo;
+
+      // 3. Filtro por Prenda y Talla
+      let coincidePrendaTalla = true;
+      if (filtroRepoPrenda === "chaleco") {
+        if (!item.chaleco) coincidePrendaTalla = false;
+        if (filtroRepoTalla && item.chalecoTalla !== filtroRepoTalla) coincidePrendaTalla = false;
+      } else if (filtroRepoPrenda === "polo") {
+        if (!item.polo) coincidePrendaTalla = false;
+        if (filtroRepoTalla && item.poloTalla !== filtroRepoTalla) coincidePrendaTalla = false;
+      } else if (filtroRepoPrenda === "gorro") {
+        if (!item.gorro) coincidePrendaTalla = false;
+      } else {
+        // Si no selecciona tipo de prenda pero sí talla genérica
+        if (filtroRepoTalla) {
+          const matchChaleco = item.chaleco && item.chalecoTalla === filtroRepoTalla;
+          const matchPolo = item.polo && item.poloTalla === filtroRepoTalla;
+          if (!matchChaleco && !matchPolo) coincidePrendaTalla = false;
+        }
+      }
+
+      // 4. Filtro por Fechas (Desde / Hasta basado en última actualización)
+      let coincideFecha = true;
+      const fechaRegistro = item.ultimaFecha ? new Date(item.ultimaFecha) : null;
+
+      if (filtroRepoDesde && fechaRegistro) {
+        const desde = new Date(filtroRepoDesde + "T00:00:00");
+        if (fechaRegistro < desde) coincideFecha = false;
+      }
+
+      if (filtroRepoHasta && fechaRegistro) {
+        const hasta = new Date(filtroRepoHasta + "T23:59:59");
+        if (fechaRegistro > hasta) coincideFecha = false;
+      }
+
+      return coincideBusqueda && coincideCargo && coincidePrendaTalla && coincideFecha;
+    });
+  }, [estadoPersonalConsolidado, filtroRepoBusqueda, filtroRepoCargo, filtroRepoPrenda, filtroRepoTalla, filtroRepoDesde, filtroRepoHasta]);
+
+  // Exportar Reporte de Estado a Excel
+  const descargarExcelReporteEstado = () => {
+    if (reporteEstadoFiltrado.length === 0) {
+      alert("No hay datos para exportar con los filtros seleccionados.");
+      return;
+    }
+
+    const datosFormateados = reporteEstadoFiltrado.map((item, index) => {
+      const tieneTodo = item.chaleco && item.polo && item.gorro;
+      const noTieneNada = !item.chaleco && !item.polo && !item.gorro;
+      const estadoGeneral = noTieneNada ? "Sin Material" : tieneTodo ? "Al Día / Completo" : "Parcial";
+
+      return {
+        "N°": index + 1,
+        "DNI": item.dni,
+        "Nombres y Apellidos": item.nombre,
+        "Cargo": item.cargo,
+        "Chaleco (Talla)": item.chaleco ? item.chalecoTalla : "No",
+        "Polo (Talla)": item.polo ? item.poloTalla : "No",
+        "Gorro": item.gorro ? "SÍ" : "No",
+        "Estado General": estadoGeneral
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(datosFormateados);
+    worksheet["!cols"] = [
+      { wch: 6 },  // N°
+      { wch: 12 }, // DNI
+      { wch: 32 }, // Nombre
+      { wch: 24 }, // Cargo
+      { wch: 15 }, // Chaleco
+      { wch: 15 }, // Polo
+      { wch: 10 }, // Gorro
+      { wch: 18 }  // Estado General
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Estado de Personal");
+
+    const fechaHoy = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(workbook, `Reporte_Estado_Personal_${fechaHoy}.xlsx`);
+  };
+
+  // Historial filtrado para pestaña Historial
+  const [busquedaHistorial, setBusquedaHistorial] = useState("");
+  const historialFiltrado = useMemo(() => {
+    if (!busquedaHistorial.trim()) return entregas;
+    const term = busquedaHistorial.toLowerCase();
+    return entregas.filter(item =>
+      item.persona.toLowerCase().includes(term) ||
+      item.dni.includes(term) ||
+      item.cargo.toLowerCase().includes(term) ||
+      item.tipo.toLowerCase().includes(term) ||
+      (item.talla && item.talla.toLowerCase().includes(term))
+    );
+  }, [entregas, busquedaHistorial]);
+
+  // Estados para inventario de bienes/otros
+  const [bienes, setBienes] = useState([]);
+  const [nuevoBien, setNuevoBien] = useState({
+    nombre_item: "",
+    tipo_unidad: "unidades",
+    cantidad: 1,
+    observacion: "",
+    imagen_url: ""
+  });
+
+  const cargarBienes = async () => {
+    const { data, error } = await supabase
+      .from("bienes_recepcionados")
+      .select("*")
+      .order("fecha", { ascending: false });
+    if (!error && data) setBienes(data);
+  };
+
+  useEffect(() => {
+    if (modulo === "bienes") cargarBienes();
+  }, [modulo]);
+
+  const guardarBien = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from("bienes_recepcionados").insert([nuevoBien]);
+    if (error) {
+      mostrarNotificacion("Error al registrar el bien.", "error");
+    } else {
+      setNuevoBien({ nombre_item: "", tipo_unidad: "unidades", cantidad: 1, observacion: "", imagen_url: "" });
+      cargarBienes();
+      mostrarNotificacion("Bien registrado correctamente.");
+    }
+  };
+
+  // Inventario de prendas handler
+  const [invProducto, setInvProducto] = useState("chaleco");
+  const [invTalla, setInvTalla] = useState("M");
+  const [invCantidad, setInvCantidad] = useState(1);
+
   const agregarStock = async () => {
     const cantidadASumar = Math.max(1, Number(invCantidad) || 0);
     const esGorro = invProducto === "gorro";
     const tallaFinal = esGorro ? null : invTalla;
 
-    // Buscar si ya existe la fila en la BD
     let query = supabase.from("inventario").select("*").eq("producto", invProducto);
     if (esGorro) {
       query = query.is("talla", null);
@@ -357,102 +519,62 @@ const guardarBien = async (e) => {
       query = query.eq("talla", tallaFinal);
     }
 
-    const { data: existente, error: errConsulta } = await query.maybeSingle();
-
-    if (errConsulta) {
-      mostrarNotificacion("Error al consultar el inventario: " + errConsulta.message, "error");
-      return;
-    }
+    const { data: existente } = await query.maybeSingle();
 
     if (existente) {
-      // Actualizar registro existente
-      const { error } = await supabase
+      await supabase
         .from("inventario")
-        .update({
-          stock: existente.stock + cantidadASumar,
-          actualizado_en: new Date().toISOString()
-        })
+        .update({ stock: existente.stock + cantidadASumar, actualizado_en: new Date().toISOString() })
         .eq("id", existente.id);
-
-      if (error) {
-        mostrarNotificacion("No se pudo actualizar el inventario: " + error.message, "error");
-        return;
-      }
     } else {
-      // Crear registro nuevo si no existe
-      const { error } = await supabase.from("inventario").insert([
-        {
-          producto: invProducto,
-          talla: tallaFinal,
-          stock: cantidadASumar,
-          actualizado_en: new Date().toISOString()
-        }
-      ]);
-
-      if (error) {
-        mostrarNotificacion("No se pudo insertar en el inventario: " + error.message, "error");
-        return;
-      }
+      await supabase.from("inventario").insert([{
+        producto: invProducto,
+        talla: tallaFinal,
+        stock: cantidadASumar,
+        actualizado_en: new Date().toISOString()
+      }]);
     }
 
-    mostrarNotificacion(
-      `Se ingresaron +${cantidadASumar} unidades a ${invProducto.toUpperCase()}${esGorro ? "" : ` (${invTalla})`}`
-    );
+    mostrarNotificacion(`Stock actualizado exitosamente (+${cantidadASumar})`);
     setInvCantidad(1);
     await cargarDatos();
   };
 
-  const handleProductoChange = (e) => {
-    const prodSeleccionado = e.target.value;
-    setInvProducto(prodSeleccionado);
-    if (prodSeleccionado === "gorro") {
-      setInvTalla(""); // Limpia la talla si selecciona gorro
-    } else if (!invTalla) {
-      setInvTalla("M"); // Vuelve a una talla por defecto si cambia a chaleco/polo
-    }
-  };
+  // Carga masiva de personal
+  const [textoPersonal, setTextoPersonal] = useState("");
+  const [cargoSeleccionado, setCargoSeleccionado] = useState("");
+  const [busquedaCargo, setBusquedaCargo] = useState("");
 
-  // Procesar texto de personal
   const procesarPersonal = async () => {
     if (!cargoSeleccionado) {
-      mostrarNotificacion("Primero seleccione un cargo.", "error");
+      mostrarNotificacion("Seleccione un cargo.", "error");
       return;
     }
-
-    const lineas = textoPersonal.trim().split("\n").filter(linea => linea.trim());
+    const lineas = textoPersonal.trim().split("\n").filter(l => l.trim());
     const nuevos = [];
-
     for (const linea of lineas) {
       const partes = linea.trim().split(/\s+/);
-      const dni = partes.find(item => /^\d{8}$/.test(item));
-      const celular = partes.find(item => /^\d{9}$/.test(item));
-      const nombre = partes
-        .filter(item => !/^\d{8}$/.test(item) && !/^\d{9}$/.test(item))
-        .join(" ");
-
-      if (nombre && dni && celular) {
-        nuevos.push({ nombre, dni, celular, cargo: cargoSeleccionado });
+      const dni = partes.find(i => /^\d{8}$/.test(i));
+      const celular = partes.find(i => /^\d{9}$/.test(i));
+      const nombre = partes.filter(i => !/^\d{8}$/.test(i) && !/^\d{9}$/.test(i)).join(" ");
+      if (nombre && dni) {
+        nuevos.push({ nombre, dni, celular: celular || "-", cargo: cargoSeleccionado });
       }
     }
-
     if (nuevos.length === 0) {
-      mostrarNotificacion("No se encontraron registros válidos.", "error");
+      mostrarNotificacion("No hay registros válidos.", "error");
       return;
     }
-
     const { error } = await supabase.from("personal").upsert(nuevos, { onConflict: "dni" });
-
     if (error) {
-      mostrarNotificacion("No se pudo guardar el personal: " + error.message, "error");
+      mostrarNotificacion(error.message, "error");
       return;
     }
-
-    mostrarNotificacion(`${nuevos.length} persona(s) registrada(s) correctamente.`);
+    mostrarNotificacion(`${nuevos.length} personas registradas correctamente.`);
     setTextoPersonal("");
     await cargarDatos();
   };
 
-  // Filtrar cargos y personas
   const cargosFiltrados = useMemo(() => {
     if (!busquedaCargo) return CARGOS;
     return CARGOS.filter(c => c.toLowerCase().includes(busquedaCargo.toLowerCase()));
@@ -460,134 +582,23 @@ const guardarBien = async (e) => {
 
   const personasFiltradas = useMemo(() => {
     if (!busquedaPersona) return personal;
-    return personal.filter(p => 
+    return personal.filter(p =>
       p.nombre.toLowerCase().includes(busquedaPersona.toLowerCase()) ||
       p.dni.includes(busquedaPersona)
     );
   }, [busquedaPersona, personal]);
 
-  // Filtrar Entregas
-  const entregasFiltradas = useMemo(() => {
-    return entregas.filter(item => {
-      const coincideBusqueda = 
-        !filtroBusqueda ||
-        item.persona.toLowerCase().includes(filtroBusqueda.toLowerCase()) ||
-        item.dni.includes(filtroBusqueda);
-
-      const coincideCargo = !filtroCargo || item.cargo === filtroCargo;
-      const coincidePrenda = !filtroPrenda || item.tipo === filtroPrenda;
-      const coincideTalla = !filtroTalla || item.talla === filtroTalla;
-
-      let coincideFecha = true;
-      const fechaEntrega = item.fechaRaw ? new Date(item.fechaRaw) : null;
-
-      if (filtroFechaDesde && fechaEntrega) {
-        const desde = new Date(filtroFechaDesde + "T00:00:00");
-        if (fechaEntrega < desde) coincideFecha = false;
-      }
-
-      if (filtroFechaHasta && fechaEntrega) {
-        const hasta = new Date(filtroFechaHasta + "T23:59:59");
-        if (fechaEntrega > hasta) coincideFecha = false;
-      }
-
-      return coincideBusqueda && coincideCargo && coincidePrenda && coincideTalla && coincideFecha;
-    });
-  }, [entregas, filtroBusqueda, filtroCargo, filtroPrenda, filtroTalla, filtroFechaDesde, filtroFechaHasta]);
-
-  const descargarExcel = () => {
-  if (entregasFiltradas.length === 0) {
-    alert("No hay datos para exportar con los filtros seleccionados.");
-    return;
-  }
-
-  // 1. Mapear y dar formato a las filas
-  const datosFormateados = entregasFiltradas.map((e, index) => ({
-    "N°": index + 1,
-    "Fecha de Entrega": e.fecha,
-    "DNI": e.dni,
-    "Nombres y Apellidos": e.persona,
-    "Cargo / Área": e.cargo,
-    "Tipo de Prenda": e.tipo.toUpperCase(),
-    "Talla": e.talla,
-  }));
-
-  // 2. Crear la hoja de trabajo a partir de los datos
-  const worksheet = XLSX.utils.json_to_sheet(datosFormateados);
-
-  // 3. Configurar anchos de columnas de manera proporcionada
-  const columnWidths = [
-    { wch: 6 },  // N°
-    { wch: 18 }, // Fecha
-    { wch: 12 }, // DNI
-    { wch: 32 }, // Persona
-    { wch: 22 }, // Cargo
-    { wch: 16 }, // Prenda
-    { wch: 10 }, // Talla
-  ];
-  worksheet["!cols"] = columnWidths;
-
-  // 4. Crear el libro de trabajo y añadir la hoja
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte de Entregas");
-
-  // 5. Generar la fecha actual para el nombre del archivo
-  const fechaHoy = new Date().toISOString().split("T")[0];
-
-  // 6. Descargar el archivo
-  XLSX.writeFile(workbook, `Reporte_Entregas_${fechaHoy}.xlsx`);
-};
-
-
-  // Registrar entrega
-  const registrarEntrega = async () => {
-  const esGorro = tipoPrenda === "gorro";
-
-  if (!personaSeleccionada || (!esGorro && !tallaSeleccionada)) {
-    mostrarNotificacion("Seleccione una persona y una talla.", "error");
-    return;
-  }
-
-  const { error } = await supabase.rpc("registrar_entrega_prenda", {
-    p_personal_id: personaSeleccionada,
-    p_producto: tipoPrenda,
-    p_talla: esGorro ? null : tallaSeleccionada
-  });
-
-  if (error) {
-    mostrarNotificacion(error.message, "error");
-    return;
-  }
-
-  mostrarNotificacion("Entrega registrada exitosamente.");
-  setPersonaSeleccionada("");
-  setTallaSeleccionada("M");
-  await cargarDatos();
-};
-
   return (
-    <div className="min-h-screen bg-gray-50 relative">
-      
-      {/* Componente Toast de Notificación con Diseño */}
+    <div className="min-h-screen bg-gray-50 relative pb-12">
+      {/* Toast Notificación */}
       {notificacion.visible && (
         <div className="fixed top-5 right-5 z-50 animate-bounce">
-          <div
-            className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl border ${
-              notificacion.tipo === "exito"
-                ? "bg-emerald-600 text-white border-emerald-500"
-                : "bg-red-600 text-white border-red-500"
-            }`}
-          >
-            {notificacion.tipo === "exito" ? (
-              <CheckCircle2 className="w-6 h-6 flex-shrink-0 text-emerald-200" />
-            ) : (
-              <AlertCircle className="w-6 h-6 flex-shrink-0 text-red-200" />
-            )}
+          <div className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl border ${
+            notificacion.tipo === "exito" ? "bg-emerald-600 text-white border-emerald-500" : "bg-red-600 text-white border-red-500"
+          }`}>
+            {notificacion.tipo === "exito" ? <CheckCircle2 className="w-6 h-6 text-emerald-200" /> : <AlertCircle className="w-6 h-6 text-red-200" />}
             <p className="font-medium text-sm">{notificacion.mensaje}</p>
-            <button
-              onClick={() => setNotificacion(prev => ({ ...prev, visible: false }))}
-              className="ml-auto text-white/80 hover:text-white"
-            >
+            <button onClick={() => setNotificacion(prev => ({ ...prev, visible: false }))} className="ml-auto text-white/80 hover:text-white">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -595,340 +606,535 @@ const guardarBien = async (e) => {
       )}
 
       {/* Header */}
-      <header className="bg-blue-950 text-white p-4 shadow-lg flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0 relative">
+      <header className="bg-blue-950 text-white p-4 shadow-lg flex flex-col md:flex-row items-center justify-between gap-3 relative">
         <div className="flex items-center justify-center">
-          <Image 
-            src="/logo.png" 
-            alt="Logo INVONPE" 
-            width={180} 
-            height={180} 
-            className="object-contain h-16 md:h-20 w-auto filter drop-shadow-md"
-          />
+          <Image src="/logo.png" alt="Logo INVONPE" width={180} height={180} className="object-contain h-16 md:h-20 w-auto filter drop-shadow-md" />
         </div>
-        <h1 className="text-xl md:text-2xl font-bold text-center md:absolute md:left-1/2 md:-translate-x-1/2 tracking-wide">
-          CONTROL DE INDUMENTARIA
+        <h1 className="text-xl md:text-2xl font-bold text-center tracking-wide">
+          CONTROL DE INDUMENTARIA - ONPE
         </h1>
-        {/* Elemento fantasma opcional para balancear el flex en desktop si fuera necesario */}
         <div className="hidden md:block w-20"></div>
       </header>
 
       {/* Navegación */}
-      <nav className="bg-white shadow-md p-4">
-        <div className="max-w-6xl mx-auto flex gap-4 flex-wrap justify-center">
-          <button
-            onClick={() => setModulo("entregas")}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition ${
-              modulo === "entregas" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Shirt size={20} />
-            Entregas
+      <nav className="bg-white shadow-md p-4 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex gap-3 flex-wrap justify-center">
+          <button onClick={() => setModulo("entregas")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "entregas" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Shirt size={18} /> Entregas Múltiples
           </button>
-          <button
-            onClick={() => setModulo("inventario")}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition ${
-              modulo === "inventario" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Package size={20} />
-            Inventario
+          <button onClick={() => setModulo("estado")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "estado" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Users size={18} /> Estado de Personal
           </button>
-          <button
-            onClick={() => setModulo("personal")}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition ${
-              modulo === "personal" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Users size={20} />
-            Personal
+          <button onClick={() => setModulo("reportes")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "reportes" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <FileText size={18} /> Reportes de Estado
           </button>
-          <button
-            onClick={() => setModulo("reportes")}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition ${
-              modulo === "reportes" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <FileText size={20} />
-            Reportes
+          <button onClick={() => setModulo("historial")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "historial" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <History size={18} /> Historial de Cambios
           </button>
-          <button
-          onClick={() => setModulo("bienes")}
-          className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition ${
-            modulo === "bienes" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          <Package size={20} />
-          Bienes
-        </button>
+          <button onClick={() => setModulo("inventario")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "inventario" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Package size={18} /> Inventario Prendas
+          </button>
+          <button onClick={() => setModulo("personal")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "personal" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <Users size={18} /> Cargar Personal
+          </button>
+          <button onClick={() => setModulo("bienes")} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition ${modulo === "bienes" ? "bg-blue-600 text-white shadow" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+            <FileText size={18} /> Recepción Bienes
+          </button>
         </div>
       </nav>
 
-      {/* Contenido principal */}
-      <main className="max-w-6xl mx-auto p-4">
+      {/* Contenedor Principal */}
+      <main className="max-w-7xl mx-auto p-4 mt-4">
 
-        {/* 1. Módulo Entregas */}
+        {/* MÓDULO 1: ENTREGAS MULTIPLES */}
         {modulo === "entregas" && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-800">Control de Entregas</h2>
-            <button
-              onClick={() => setMostrarFormulario(!mostrarFormulario)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center gap-2 transform active:scale-95"
-            >
-              <Shirt className="w-5 h-5" />
-              {mostrarFormulario ? "Ocultar Formulario" : "Comenzar Nueva Entrega"}
-            </button>
-          </div>
+          <div className="space-y-6 max-w-4xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <Shirt className="text-blue-600" /> Registrar Dotación de Indumentaria
+              </h2>
+              <p className="text-sm text-gray-500 mb-6">Selecciona una persona y marca las prendas que se le entregarán simultáneamente en esta jornada.</p>
 
-          {/* Formulario desplegable con animación de transición */}
-          <div
-            className={`transition-all duration-500 ease-in-out overflow-hidden transform origin-top ${
-              mostrarFormulario
-                ? "max-h-[800px] opacity-100 scale-y-100 mb-6"
-                : "max-h-0 opacity-0 scale-y-95 pointer-events-none"
-            }`}
-          >
-            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b">
-                Registrar nueva entrega
-              </h3>
-
-              <div className="grid md:grid-cols-2 gap-5">
+              <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    Buscar persona:
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Buscar Persona (Nombre o DNI):</label>
                   <input
                     type="text"
                     value={busquedaPersona}
                     onChange={(e) => setBusquedaPersona(e.target.value)}
-                    placeholder="Nombre o DNI..."
-                    className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
+                    placeholder="Escribe para filtrar..."
+                    className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm mb-2"
                   />
                   <select
                     value={personaSeleccionada}
                     onChange={(e) => setPersonaSeleccionada(e.target.value)}
-                    className="w-full border border-gray-300 rounded-xl p-2.5 mt-3 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
+                    className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-gray-800 bg-white"
                   >
-                    <option value="">-- Seleccione persona --</option>
+                    <option value="">-- Seleccionar Persona --</option>
                     {personasFiltradas.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nombre} ({p.dni}) - {p.cargo}
+                        {p.nombre} ({p.dni}) - [{p.cargo}]
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                      Tipo de prenda:
-                    </label>
-                    <select
-                      value={tipoPrenda}
-                      onChange={(e) => setTipoPrenda(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
-                    >
-                      <option value="chaleco">Chaleco</option>
-                      <option value="polo">Polo</option>
-                      <option value="gorro">Gorro</option>
-                    </select>
-                  </div>
+                <hr className="border-gray-100 my-4" />
 
-                  <div>
-                    {/* Reemplazar el bloque actual de Talla por el siguiente: */}
-                    {tipoPrenda !== "gorro" ? (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                          Talla:
-                        </label>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-gray-600">Prendas a Asignar en este Registro:</h3>
+
+                  {/* Chaleco */}
+                  <div className={`p-4 rounded-xl border transition-all ${incluirChaleco ? "border-blue-500 bg-blue-50/40" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={incluirChaleco}
+                          onChange={(e) => IncluirChalecoSet(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        Chaleco
+                      </label>
+                    </div>
+                    {incluirChaleco && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs font-semibold text-gray-600">Talla:</span>
                         <select
-                          value={tallaSeleccionada}
-                          onChange={(e) => setTallaSeleccionada(e.target.value)}
-                          className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
+                          value={tallaChaleco}
+                          onChange={(e) => setTallaChaleco(e.target.value)}
+                          className="border border-gray-300 rounded-lg p-2 text-sm bg-white font-bold outline-none"
                         >
-                          {TALLAS.map((talla) => (
-                            <option key={talla} value={talla}>
-                              {talla} - Stock:{" "}
-                              {tipoPrenda === "chaleco"
-                                ? inventarioChalecos[talla]
-                                : inventarioPolos[talla]}
-                            </option>
+                          {TALLAS.map(t => (
+                            <option key={t} value={t}>{t} (Stock: {inventarioChalecos[t]})</option>
                           ))}
                         </select>
                       </div>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                          Talla:
-                        </label>
-                        <div className="w-full border border-gray-200 bg-gray-50 text-gray-500 rounded-xl p-2.5 text-sm font-medium">
-                          Talla única (Stock disponible: {inventarioGorros})
-                        </div>
+                    )}
+                  </div>
+
+                  {/* Polo */}
+                  <div className={`p-4 rounded-xl border transition-all ${incluirPolo ? "border-emerald-500 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={incluirPolo}
+                          onChange={(e) => incluirPoloSet(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                        />
+                        Polo
+                      </label>
+                    </div>
+                    {incluirPolo && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs font-semibold text-gray-600">Talla:</span>
+                        <select
+                          value={tallaPolo}
+                          onChange={(e) => setTallaPolo(e.target.value)}
+                          className="border border-gray-300 rounded-lg p-2 text-sm bg-white font-bold outline-none"
+                        >
+                          {TALLAS.map(t => (
+                            <option key={t} value={t}>{t} (Stock: {inventarioPolos[t]})</option>
+                          ))}
+                        </select>
                       </div>
                     )}
                   </div>
+
+                  {/* Gorro */}
+                  <div className={`p-4 rounded-xl border transition-all ${incluirGorro ? "border-amber-500 bg-amber-50/40" : "border-gray-200 bg-white"}`}>
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={incluirGorro}
+                          onChange={(e) => incluirGorroSet(e.target.checked)}
+                          className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                        />
+                        Gorro (Talla única)
+                      </label>
+                      <span className="text-xs text-gray-500">Stock disponible: {inventarioGorros}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={registrarEntregaMultiple}
+                  className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg transition-all"
+                >
+                  Confirmar y Guardar Registro
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MÓDULO 2: ESTADO DE PERSONAL */}
+        {modulo === "estado" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">Estado Actual de Indumentaria por Persona</h2>
+                  <p className="text-xs text-gray-500">Puedes cambiar la talla o marcar "No" directamente desde los selectores de la tabla.</p>
+                </div>
+                <div className="w-full md:w-80">
+                  <input
+                    type="text"
+                    value={busquedaEstado}
+                    onChange={(e) => setBusquedaEstado(e.target.value)}
+                    placeholder="Filtrar por nombre, DNI, cargo..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
                 </div>
               </div>
 
-              <button
-                onClick={registrarEntrega}
-                className="mt-6 bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all w-full md:w-auto font-semibold shadow-lg hover:shadow-emerald-600/30"
-              >
-                Guardar Entrega
-              </button>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase">
+                      <th className="py-3.5 px-4">Colaborador</th>
+                      <th className="py-3.5 px-4">DNI</th>
+                      <th className="py-3.5 px-4">Cargo</th>
+                      <th className="py-3.5 px-4 text-center">Chaleco (Talla / Editar)</th>
+                      <th className="py-3.5 px-4 text-center">Polo (Talla / Editar)</th>
+                      <th className="py-3.5 px-4 text-center">Gorro</th>
+                      <th className="py-3.5 px-4 text-center">Estado General</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {estadoFiltrado.map((item) => {
+                      const tieneTodo = item.chaleco && item.polo && item.gorro;
+                      const noTieneNada = !item.chaleco && !item.polo && !item.gorro;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-gray-900">{item.nombre}</td>
+                          <td className="py-3.5 px-4 font-mono text-xs">{item.dni}</td>
+                          <td className="py-3.5 px-4 text-xs text-gray-500">{item.cargo}</td>
+                          
+                          <td className="py-3.5 px-4 text-center">
+                            <select
+                              defaultValue={item.chaleco ? item.chalecoTalla : "NO"}
+                              key={`chaleco-${item.id}-${item.chalecoTalla}`}
+                              onChange={(e) => handleCambiarPrendaEstado(item.id, "chaleco", item.chalecoTalla, e)}
+                              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border outline-none cursor-pointer ${
+                                item.chaleco ? "bg-amber-50 text-amber-800 border-amber-300" : "bg-gray-100 text-gray-500 border-gray-300"
+                              }`}
+                            >
+                              <option value="NO">No / Sin chaleco</option>
+                              {TALLAS.map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <select
+                              defaultValue={item.polo ? item.poloTalla : "NO"}
+                              key={`polo-${item.id}-${item.poloTalla}`}
+                              onChange={(e) => handleCambiarPrendaEstado(item.id, "polo", item.poloTalla, e)}
+                              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border outline-none cursor-pointer ${
+                                item.polo ? "bg-blue-50 text-blue-800 border-blue-300" : "bg-gray-100 text-gray-500 border-gray-300"
+                              }`}
+                            >
+                              <option value="NO">No / Sin polo</option>
+                              {TALLAS.map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <select
+                              defaultValue={item.gorro ? "SÍ" : "NO"}
+                              key={`gorro-${item.id}-${item.gorro}`}
+                              onChange={(e) => handleCambiarPrendaEstado(item.id, "gorro", item.gorro ? "SÍ" : "NO", e)}
+                              className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border outline-none cursor-pointer ${
+                                item.gorro ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-gray-100 text-gray-500 border-gray-300"
+                              }`}
+                            >
+                              <option value="NO">NO</option>
+                              <option value="SÍ">SÍ</option>
+                            </select>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            {noTieneNada ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-600">Sin Material</span>
+                            ) : tieneTodo ? (
+                              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-sm">Al Día / Completo</span>
+                            ) : (
+                              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-white shadow-sm">Parcial</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {estadoFiltrado.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="text-center py-8 text-gray-400">No se encontraron registros en el estado actual.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Módulo Historial con Buscador Instantáneo */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">
-                  Historial de entregas ({historialFiltrado.length})
-                </h3>
-                <p className="text-xs text-gray-500">Muestra la indumentaria y gorro entregados en la misma jornada</p>
-              </div>
+        {/* MÓDULO 3: REPORTES DE ESTADO DE PERSONAL (CON FILTROS AVANZADOS SOLICITADOS) */}
+        {modulo === "reportes" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 space-y-4">
+              <h2 className="text-xl font-bold text-gray-800">Filtros de búsqueda avanzada</h2>
+              <p className="text-xs text-gray-500">Busca y filtra el estado del personal según los parámetros requeridos.</p>
 
-              {/* Input de Búsqueda tipo AJAX */}
-              <div className="w-full md:w-80 relative">
-                <input
-                  type="text"
-                  value={busquedaHistorial}
-                  onChange={(e) => setBusquedaHistorial(e.target.value)}
-                  placeholder="Buscar por Nombre, DNI o Cargo..."
-                  className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                />
-                {busquedaHistorial && (
-                  <button
-                    onClick={() => setBusquedaHistorial("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2">
+                {/* 1. Buscar Persona / DNI */}
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Buscar Persona / DNI</label>
+                  <input
+                    type="text"
+                    value={filtroRepoBusqueda}
+                    onChange={(e) => setFiltroRepoBusqueda(e.target.value)}
+                    placeholder="Nombre o DNI..."
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* 2. Cargo */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Cargo</label>
+                  <select
+                    value={filtroRepoCargo}
+                    onChange={(e) => setFiltroRepoCargo(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                   >
-                    ✕
-                  </button>
-                )}
+                    <option value="">Todos los cargos</option>
+                    {CARGOS.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Prenda */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Prenda</label>
+                  <select
+                    value={filtroRepoPrenda}
+                    onChange={(e) => setFiltroRepoPrenda(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  >
+                    <option value="">Todas</option>
+                    <option value="chaleco">Chaleco</option>
+                    <option value="polo">Polo</option>
+                    <option value="gorro">Gorro</option>
+                  </select>
+                </div>
+
+                {/* 4. Talla */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Talla</label>
+                  <select
+                    value={filtroRepoTalla}
+                    onChange={(e) => setFiltroRepoTalla(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  >
+                    <option value="">Todas las tallas</option>
+                    {TALLAS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Desde */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={filtroRepoDesde}
+                    onChange={(e) => setFiltroRepoDesde(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* 6. Hasta */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={filtroRepoHasta}
+                    onChange={(e) => setFiltroRepoHasta(e.target.value)}
+                    className="w-full border border-gray-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              {(filtroRepoBusqueda || filtroRepoCargo || filtroRepoPrenda || filtroRepoTalla || filtroRepoDesde || filtroRepoHasta) && (
+                <button
+                  onClick={() => {
+                    setFiltroRepoBusqueda("");
+                    setFiltroRepoCargo("");
+                    setFiltroRepoPrenda("");
+                    setFiltroRepoTalla("");
+                    setFiltroRepoDesde("");
+                    setFiltroRepoHasta("");
+                  }}
+                  className="mt-2 text-xs font-semibold text-red-600 hover:text-red-700 underline"
+                >
+                  Limpiar todos los filtros
+                </button>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-800">Resultados ({reporteEstadoFiltrado.length})</h3>
+                <button
+                  onClick={descargarExcelReporteEstado}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-md flex items-center gap-2"
+                >
+                  Exportar a Excel (.xlsx)
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-sm text-left border-collapse">
+                  <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
+                    <tr>
+                      <th className="py-3.5 px-4">DNI</th>
+                      <th className="py-3.5 px-4">Colaborador</th>
+                      <th className="py-3.5 px-4">Cargo</th>
+                      <th className="py-3.5 px-4 text-center">Chaleco</th>
+                      <th className="py-3.5 px-4 text-center">Polo</th>
+                      <th className="py-3.5 px-4 text-center">Gorro</th>
+                      <th className="py-3.5 px-4 text-center">Estado General</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {reporteEstadoFiltrado.map((item) => {
+                      const tieneTodo = item.chaleco && item.polo && item.gorro;
+                      const noTieneNada = !item.chaleco && !item.polo && !item.gorro;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
+                          <td className="py-3 px-4 font-mono text-xs">{item.dni}</td>
+                          <td className="py-3 px-4 font-medium text-gray-900">{item.nombre}</td>
+                          <td className="py-3 px-4 text-xs text-gray-500 font-semibold">{item.cargo}</td>
+                          <td className="py-3 px-4 text-center font-bold">{item.chaleco ? item.chalecoTalla : "No"}</td>
+                          <td className="py-3 px-4 text-center font-bold">{item.polo ? item.poloTalla : "No"}</td>
+                          <td className="py-3 px-4 text-center font-bold">{item.gorro ? "SÍ" : "No"}</td>
+                          <td className="py-3 px-4 text-center">
+                            {noTieneNada ? (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-600">Sin Material</span>
+                            ) : tieneTodo ? (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white">Al Día / Completo</span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500 text-white">Parcial</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {reporteEstadoFiltrado.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="text-center py-8 text-gray-400 font-medium">No se encontraron registros para los filtros seleccionados.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <th className="py-3.5 px-4">FECHA</th>
-                    <th className="py-3.5 px-4">PERSONA</th>
-                    <th className="py-3.5 px-4">DNI</th>
-                    <th className="py-3.5 px-4">CARGO</th>
-                    <th className="py-3.5 px-4">PRENDA</th>
-                    <th className="py-3.5 px-4 text-center">TALLA</th>
-                    <th className="py-3.5 px-4 text-center">GORRO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm font-medium text-gray-700">
-                  {historialFiltrado.map((item) => (
-                    <tr key={item.id || item.dni + item.fechaRaw} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="py-3.5 px-4 whitespace-nowrap text-gray-500 text-xs">
-                        {item.fecha}
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-gray-900">
-                        {item.persona}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-gray-600 text-xs">
-                        {item.dni}
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-500 text-xs">
-                        {item.cargo}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide capitalize ${
-                          item.prenda === 'chaleco' 
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                            : item.prenda === 'polo' 
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-gray-100 text-gray-600 border border-gray-200'
-                        }`}>
-                          {item.prenda}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {item.prenda !== 'Ninguna' ? (
-                          <select
-                            value={item.talla}
-                            onChange={(e) => cambiarTallaEntrega(item.id, item.talla, e.target.value)}
-                            className="bg-white border border-gray-300 text-gray-800 text-xs font-bold rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer shadow-sm"
-                          >
-                            {TALLAS.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-gray-400 font-bold">-</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {item.tieneGorro ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            SÍ
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
-                            NO
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+        {/* MÓDULO 4: HISTORIAL DETALLADO */}
+        {modulo === "historial" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">Historial de Cambios y Entregas</h2>
+                  <p className="text-xs text-gray-500">Registro cronológico detallado de cada prenda entregada o modificada.</p>
+                </div>
+                <div className="w-full md:w-80">
+                  <input
+                    type="text"
+                    value={busquedaHistorial}
+                    onChange={(e) => setBusquedaHistorial(e.target.value)}
+                    placeholder="Buscar en el historial..."
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
 
-                  {historialFiltrado.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center py-8 text-gray-400 font-normal">
-                        No se encontraron coincidencias para "{busquedaHistorial}".
-                      </td>
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase">
+                      <th className="py-3.5 px-4">Fecha y Hora</th>
+                      <th className="py-3.5 px-4">Colaborador</th>
+                      <th className="py-3.5 px-4">DNI</th>
+                      <th className="py-3.5 px-4">Cargo</th>
+                      <th className="py-3.5 px-4">Prenda</th>
+                      <th className="py-3.5 px-4 text-center">Talla</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {historialFiltrado.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3.5 px-4 font-mono text-xs text-gray-500">{item.fecha}</td>
+                        <td className="py-3.5 px-4 font-semibold text-gray-900">{item.persona}</td>
+                        <td className="py-3.5 px-4 font-mono text-xs">{item.dni}</td>
+                        <td className="py-3.5 px-4 text-xs text-gray-500">{item.cargo}</td>
+                        <td className="py-3.5 px-4 capitalize font-semibold">{item.tipo}</td>
+                        <td className="py-3.5 px-4 text-center font-bold">{item.talla || "Única"}</td>
+                      </tr>
+                    ))}
+                    {historialFiltrado.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-gray-400">No hay registros en el historial.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-        {/* 2. Módulo Inventario */}
+        {/* MÓDULO 5: INVENTARIO */}
         {modulo === "inventario" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-gray-800">Gestión de Inventario</h2>
+            <h2 className="text-xl font-bold text-gray-800">Gestión de Inventario de Prendas</h2>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-600">
-              <h3 className="text-lg font-semibold mb-2">Registrar ingreso de nuevo paquete</h3>
-              <p className="text-sm text-gray-600 mb-4">Selecciona el producto, la talla e ingresa la cantidad recibida para sumarla al stock actual.</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h3 className="text-lg font-semibold mb-2">Registrar ingreso de nuevo stock</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mt-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Prenda:</label>
                   <select
                     value={invProducto}
                     onChange={(e) => setInvProducto(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 outline-none bg-white text-sm"
                   >
                     <option value="chaleco">Chaleco</option>
                     <option value="polo">Polo</option>
-                    <option value="gorro">Gorro</option> {/* <-- AÑADIDO: Opción Gorro */}
+                    <option value="gorro">Gorro</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Talla:</label>
                   {invProducto === "gorro" ? (
-                    /* <-- CONDICIONAL: Talla única para gorros */
-                    <div className="w-full border-2 border-gray-200 bg-gray-100 rounded-lg p-2 text-sm text-gray-500 font-medium">
-                      Talla Única
-                    </div>
+                    <div className="w-full border border-gray-200 bg-gray-50 rounded-xl p-2.5 text-sm text-gray-500 font-medium">Talla Única</div>
                   ) : (
                     <select
                       value={invTalla}
                       onChange={(e) => setInvTalla(e.target.value)}
-                      className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                      className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 outline-none bg-white text-sm"
                     >
                       {TALLAS.map(t => (
                         <option key={t} value={t}>{t}</option>
@@ -938,95 +1144,86 @@ const guardarBien = async (e) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad a ingresar:</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad:</label>
                   <input
                     type="number"
                     min="1"
                     value={invCantidad}
                     onChange={(e) => setInvCantidad(e.target.value)}
-                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                    className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 outline-none text-sm"
                   />
                 </div>
 
                 <button
                   onClick={agregarStock}
-                  className="bg-blue-600 text-white font-medium p-2 rounded-lg hover:bg-blue-700 transition shadow"
+                  className="bg-blue-600 text-white font-medium p-2.5 rounded-xl hover:bg-blue-700 transition shadow text-sm"
                 >
-                  Registrar
+                  Sumar al Stock
                 </button>
               </div>
             </div>
 
-            {/* Tarjetas de Stock */}
             <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white rounded-2xl shadow-xl p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <span className="w-3 h-3 bg-blue-500 rounded-full"></span> Chalecos
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   {TALLAS.map(talla => (
-                    <div key={talla} className="p-3 bg-blue-50 rounded-lg text-center">
-                      <span className="block font-bold text-gray-600">{talla}</span>
-                      <span className="text-2xl font-black text-blue-700">{inventarioChalecos[talla]}</span>
+                    <div key={talla} className="p-3 bg-blue-50 rounded-xl text-center">
+                      <span className="block font-bold text-gray-600 text-xs">{talla}</span>
+                      <span className="text-xl font-black text-blue-700">{inventarioChalecos[talla]}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white rounded-2xl shadow-xl p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <span className="w-3 h-3 bg-emerald-500 rounded-full"></span> Polos
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   {TALLAS.map(talla => (
-                    <div key={talla} className="p-3 bg-emerald-50 rounded-lg text-center">
-                      <span className="block font-bold text-gray-600">{talla}</span>
-                      <span className="text-2xl font-black text-emerald-700">{inventarioPolos[talla]}</span>
+                    <div key={talla} className="p-3 bg-emerald-50 rounded-xl text-center">
+                      <span className="block font-bold text-gray-600 text-xs">{talla}</span>
+                      <span className="text-xl font-black text-emerald-700">{inventarioPolos[talla]}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* <-- AÑADIDO: Tarjeta de Inventario para Gorros */}
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white rounded-2xl shadow-xl p-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <span className="w-3 h-3 bg-amber-500 rounded-full"></span> Gorros
                 </h3>
-                <div className="p-6 bg-amber-50 rounded-lg text-center flex flex-col justify-center items-center h-28">
-                  <span className="block font-bold text-gray-600 text-sm">Talla Única</span>
-                  <span className="text-4xl font-black text-amber-700">{inventarioGorros}</span>
+                <div className="p-6 bg-amber-50 rounded-xl text-center flex flex-col justify-center items-center h-32">
+                  <span className="block font-bold text-gray-600 text-xs">Talla Única</span>
+                  <span className="text-3xl font-black text-amber-700 mt-1">{inventarioGorros}</span>
                 </div>
               </div>
-            </div>
-
-            {/* <-- ACTUALIZADO: Totalizador con Gorros */}
-            <div className="bg-gray-100 rounded-lg p-4 text-center text-sm font-semibold text-gray-700">
-              Total Chalecos: {Object.values(inventarioChalecos).reduce((a, b) => a + b, 0)} | Total Polos: {Object.values(inventarioPolos).reduce((a, b) => a + b, 0)} | Total Gorros: {inventarioGorros}
             </div>
           </div>
         )}
 
-        {/* 3. Módulo Personal */}
+        {/* MÓDULO 6: PERSONAL */}
         {modulo === "personal" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-gray-800">Registro de Personal</h2>
+            <h2 className="text-xl font-bold text-gray-800">Carga Masiva de Personal</h2>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Cargar personal desde texto</h3>
-              
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar cargo para este lote:</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Cargo para el Lote:</label>
                 <input
                   type="text"
                   value={busquedaCargo}
                   onChange={(e) => setBusquedaCargo(e.target.value)}
                   placeholder="Buscar cargo..."
-                  className="w-full border-2 border-gray-300 rounded-lg p-2 mb-2 focus:border-blue-500 focus:outline-none"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 mb-2 focus:border-blue-500 outline-none text-sm"
                 />
                 <select
                   value={cargoSeleccionado}
                   onChange={(e) => setCargoSeleccionado(e.target.value)}
-                  className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-blue-500 focus:outline-none"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 outline-none bg-white text-sm"
                 >
                   <option value="">-- Seleccione un cargo --</option>
                   {cargosFiltrados.map(cargo => (
@@ -1038,356 +1235,79 @@ const guardarBien = async (e) => {
               <textarea
                 value={textoPersonal}
                 onChange={(e) => setTextoPersonal(e.target.value)}
-                placeholder="Ejemplo:
-RIXE TARAZONA JOSE  20017031    949631751"
-                className="w-full h-40 border-2 border-gray-300 rounded-lg p-3 font-mono text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="Pega aquí la lista (Ejemplo: JUAN PEREZ 20017031 949631751)"
+                className="w-full h-40 border border-gray-300 rounded-xl p-3 font-mono text-sm focus:border-blue-500 outline-none"
               />
-              
+
               <button
                 onClick={procesarPersonal}
-                className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition shadow"
+                className="mt-4 bg-blue-600 text-white px-6 py-2.5 rounded-xl hover:bg-blue-700 transition shadow text-sm font-semibold"
               >
-                Procesar y Agregar
+                Procesar y Guardar Personal
               </button>
             </div>
-
-            {personal.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Personal registrado ({personal.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="p-2 text-left">Nombre</th>
-                        <th className="p-2 text-left">DNI</th>
-                        <th className="p-2 text-left">Celular</th>
-                        <th className="p-2 text-left">Cargo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {personal.map((p, i) => (
-                        <tr key={p.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="p-2">{p.nombre}</td>
-                          <td className="p-2">{p.dni}</td>
-                          <td className="p-2">{p.celular}</td>
-                          <td className="p-2">{p.cargo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* 4. Módulo Reportes */}
-        {modulo === "reportes" && (
-        <div className="space-y-6">
-          <h2 className="text-xl font-bold text-gray-800">Reporte de Entregas</h2>
-
-          {/* Filtros Mejorados */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b">
-              Filtros de búsqueda avanzada
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="lg:col-span-2">
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
-                  Buscar Persona / DNI
-                </label>
-                <input
-                  type="text"
-                  value={filtroBusqueda}
-                  onChange={(e) => setFiltroBusqueda(e.target.value)}
-                  placeholder="Nombre o DNI..."
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Cargo</label>
-                <select
-                  value={filtroCargo}
-                  onChange={(e) => setFiltroCargo(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                >
-                  <option value="">Todos</option>
-                  {CARGOS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Prenda</label>
-                <select
-                  value={filtroPrenda}
-                  onChange={(e) => setFiltroPrenda(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                >
-                  <option value="">Todas</option>
-                  <option value="chaleco">Chaleco</option>
-                  <option value="polo">Polo</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Talla</label>
-                <select
-                  value={filtroTalla}
-                  onChange={(e) => setFiltroTalla(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                >
-                  <option value="">Todas</option>
-                  {TALLAS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Desde</label>
-                <input
-                  type="date"
-                  value={filtroFechaDesde}
-                  onChange={(e) => setFiltroFechaDesde(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Hasta</label>
-                <input
-                  type="date"
-                  value={filtroFechaHasta}
-                  onChange={(e) => setFiltroFechaHasta(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none text-sm transition-all"
-                />
-              </div>
-            </div>
-
-            {(filtroBusqueda || filtroCargo || filtroPrenda || filtroTalla || filtroFechaDesde || filtroFechaHasta) && (
-              <button
-                onClick={() => {
-                  setFiltroBusqueda("");
-                  setFiltroCargo("");
-                  setFiltroPrenda("");
-                  setFiltroTalla("");
-                  setFiltroFechaDesde("");
-                  setFiltroFechaHasta("");
-                }}
-                className="mt-4 text-xs font-semibold text-red-600 hover:text-red-700 underline transition-colors"
-              >
-                Limpiar todos los filtros
-              </button>
-            )}
-          </div>
-
-          {/* Resultados del Reporte */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">
-                Resultados ({entregasFiltradas.length})
-              </h3>
-
-              {/* Botón de Exportar a Excel */}
-              <button
-                onClick={descargarExcel}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-2 transform active:scale-95"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        {/* MÓDULO 7: BIENES */}
+        {modulo === "bienes" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">📦 Registrar Recepción de Bienes / Materiales</h2>
+              <form onSubmit={guardarBien} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Descripción / Item</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Cajas de ánforas, Sillas..."
+                    value={nuevoBien.nombre_item}
+                    onChange={(e) => setNuevoBien({ ...nuevoBien, nombre_item: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                    required
                   />
-                </svg>
-                Exportar a Excel (.xlsx)
-              </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
-                  <tr>
-                    <th className="py-3.5 px-4">Fecha</th>
-                    <th className="py-3.5 px-4">Persona</th>
-                    <th className="py-3.5 px-4">DNI</th>
-                    <th className="py-3.5 px-4">Cargo</th>
-                    <th className="py-3.5 px-4">Prenda</th>
-                    <th className="py-3.5 px-4">Talla</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-gray-700">
-                  {entregasFiltradas.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="text-center py-8 text-gray-400 font-medium">
-                        No se encontraron entregas que coincidan con los filtros.
-                      </td>
-                    </tr>
-                  ) : (
-                    entregasFiltradas.map((e) => (
-                      <tr key={e.id} className="hover:bg-blue-50/50 transition-colors">
-                        <td className="py-3 px-4 font-mono text-xs">{e.fecha}</td>
-                        <td className="py-3 px-4 font-medium text-gray-900">{e.persona}</td>
-                        <td className="py-3 px-4 font-mono">{e.dni}</td>
-                        <td className="py-3 px-4 text-xs text-gray-500 font-semibold">{e.cargo}</td>
-                        <td className="py-3 px-4 capitalize">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            e.tipo === "chaleco" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-                          }`}>
-                            {e.tipo}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-bold">{e.talla}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Presentación</label>
+                  <select
+                    value={nuevoBien.tipo_unidad}
+                    onChange={(e) => setNuevoBien({ ...nuevoBien, tipo_unidad: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm outline-none bg-white"
+                  >
+                    <option value="unidades">Unidades</option>
+                    <option value="cajas">Cajas</option>
+                    <option value="paquetes">Paquetes</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={nuevoBien.cantidad}
+                    onChange={(e) => setNuevoBien({ ...nuevoBien, cantidad: parseInt(e.target.value) || 1 })}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                    required
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Observaciones</label>
+                  <input
+                    type="text"
+                    placeholder="Detalles de recepción..."
+                    value={nuevoBien.observacion}
+                    onChange={(e) => setNuevoBien({ ...nuevoBien, observacion: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-gray-200 text-sm outline-none"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-sm transition">
+                    Guardar Recepción
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
-      )}
-
-      {modulo === "bienes" && (
-  <div className="space-y-6">
-    {/* Formulario de Ingreso */}
-    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-        📦 Registrar Ingreso de Bienes / Materiales
-      </h2>
-      <form onSubmit={guardarBien} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Descripción / Item</label>
-          <input
-            type="text"
-            placeholder="Ej. Escritorio, Silla, Cajas de Folletos..."
-            value={nuevoBien.nombre_item}
-            onChange={(e) => setNuevoBien({ ...nuevoBien, nombre_item: e.target.value })}
-            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Presentación</label>
-          <select
-            value={nuevoBien.tipo_unidad}
-            onChange={(e) => setNuevoBien({ ...nuevoBien, tipo_unidad: e.target.value })}
-            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          >
-            <option value="unidades">Unidades</option>
-            <option value="cajas">Cajas</option>
-            <option value="paquetes">Paquetes</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Cantidad</label>
-          <input
-            type="number"
-            min="1"
-            value={nuevoBien.cantidad}
-            onChange={(e) => setNuevoBien({ ...nuevoBien, cantidad: parseInt(e.target.value) || 1 })}
-            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            required
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Observaciones / Detalle</label>
-          <input
-            type="text"
-            placeholder="Ej. Llegan en buen estado, entregado por courier..."
-            value={nuevoBien.observacion}
-            onChange={(e) => setNuevoBien({ ...nuevoBien, observacion: e.target.value })}
-            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">URL de Foto (Opcional)</label>
-          <input
-            type="url"
-            placeholder="https://..."
-            value={nuevoBien.imagen_url}
-            onChange={(e) => setNuevoBien({ ...nuevoBien, imagen_url: e.target.value })}
-            className="w-full p-2.5 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-
-        <div className="md:col-span-3 flex justify-end">
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md hover:shadow-lg"
-          >
-            Registrar Recepción
-          </button>
-        </div>
-      </form>
-    </div>
-
-    {/* Tabla de Registros */}
-    <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-      <h3 className="text-lg font-bold text-gray-800 mb-4">Historial de Recepciones ({bienes.length})</h3>
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
-        <table className="w-full text-sm text-left border-collapse">
-          <thead className="bg-gray-50 text-gray-600 font-semibold uppercase text-xs border-b border-gray-200">
-            <tr>
-              <th className="py-3.5 px-4">Fecha</th>
-              <th className="py-3.5 px-4">Item</th>
-              <th className="py-3.5 px-4">Cantidad</th>
-              <th className="py-3.5 px-4">Observaciones</th>
-              <th className="py-3.5 px-4">Foto</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-gray-700">
-            {bienes.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="text-center py-8 text-gray-400 font-medium">
-                  No hay recepciones registradas.
-                </td>
-              </tr>
-            ) : (
-              bienes.map((b) => (
-                <tr key={b.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="py-3 px-4 text-xs font-mono">
-                    {new Date(b.fecha).toLocaleDateString()} {new Date(b.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                  <td className="py-3 px-4 font-bold text-gray-900">{b.nombre_item}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-                      {b.cantidad} {b.tipo_unidad}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-xs text-gray-500">{b.observacion || "Sin observaciones"}</td>
-                  <td className="py-3 px-4">
-                    {b.imagen_url ? (
-                      <a href={b.imagen_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs font-medium">
-                        Ver Imagen
-                      </a>
-                    ) : (
-                      <span className="text-gray-400 text-xs">N/A</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-)}
+        )}
 
       </main>
     </div>
